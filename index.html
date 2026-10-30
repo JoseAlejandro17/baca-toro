@@ -3,52 +3,59 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Vacas y Toros</title>
+<title>Baca Toro</title>
 <meta name="description" content="Adivina el número secreto de 4 dígitos distintos en 10 intentos.">
-<meta name="theme-color" content="#7A4A2B" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#241A13" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#1E9BE8">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bitter:wght@500;700;800&family=IBM+Plex+Mono:wght@500;600;700&display=swap">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🐮</text></svg>">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=IBM+Plex+Mono:wght@500;600;700&display=swap">
+<link rel="icon" href="icono-192.png">
+<link rel="apple-touch-icon" href="icono-192.png">
 
 <style>
 /* Layout: marco de app centrado. En el teléfono ocupa la pantalla entera;
    en el computador queda del ancho de un teléfono, con el tablero al medio,
    la tira de control arriba y el selector de dígitos abajo. */
 :root {
-  /* Café toro sobre verde pasto, la paleta del juego. */
-  --cafe: #7A4A2B;
+  /* Colores sacados de la ilustración: cielo, pasto, el rojo y el café del
+     rótulo, y el verde y el ámbar con que el ícono marca toros y vacas. */
+  --cielo: #1E9BE8;
+  --cielo-claro: #7FD4F8;
+  --pasto: #4EB582;
+  --cafe: #9E5630;
   --cafe-sobre: #FFFFFF;
-  --cafe-suave: #E8BFA0;
-  --cafe-suave-sobre: #2E1708;
-  --verde: #3F6B3A;
-  --verde-sobre: #FFFFFF;
-  --verde-suave: #B8DDB2;
-  --verde-suave-sobre: #122A0F;
+  --cafe-suave: #F6D9B8;
+  --cafe-suave-sobre: #44210B;
 
-  --crema: #FBF6EE;
-  --tinta: #211B16;
-  --tenue: #6F6256;
+  /* Toros: verde, el dígito está en su lugar. Vacas: ámbar, está pero corrido.
+     Es la misma lectura que las marcas de abajo, así el color significa
+     siempre lo mismo en toda la pantalla. */
+  --toros: #3FA81C;
+  --vacas: #EFA310;
+
+  --crema: #FFFCF5;
+  --tinta: #2B2017;
+  --tenue: #7C6A58;
   --superficie: #FFFFFF;
-  --superficie-var: #F0E7D9;
-  --superficie-var-sobre: #4A3B2E;
-  --borde: #DFD3C3;
-  --borde-fuerte: #C9B9A4;
+  --superficie-var: #FBF0DE;
+  --superficie-var-sobre: #5A4632;
+  --borde: #E8D9C0;
+  --borde-fuerte: #D2BC9B;
+  --dorado: #DFAF48;
 
-  --rojo: #C62828;
-  --rojo-suave: #FFDAD6;
-  --rojo-suave-sobre: #410002;
-  --marca-verde: #2E7D32;
-  --marca-amarilla: #FFC107;
-  --marca-roja: #D32F2F;
+  --rojo: #E23B2C;
+  --rojo-suave: #FFDED9;
+  --rojo-suave-sobre: #5A1008;
+  --verde-suave: #D6F0C4;
+  --verde-suave-sobre: #1C3D0C;
+  --marca-verde: #3FA81C;
+  --marca-amarilla: #F5B61E;
+  --marca-roja: #E23B2C;
 
-  --fondo-lejos: #E6DACA;
-  --fondo-cerca: #F6EFE4;
-  --sombra: 0 18px 50px rgba(62, 40, 22, 0.22), 0 2px 8px rgba(62, 40, 22, 0.1);
-  --velo: rgba(45, 32, 22, 0.55);
+  --sombra: 0 22px 60px rgba(10, 60, 95, 0.33), 0 3px 10px rgba(10, 60, 95, 0.16);
+  --velo: rgba(14, 50, 76, 0.55);
 
-  --display: "Bitter", Georgia, "Times New Roman", serif;
+  --display: "Baloo 2", "Trebuchet MS", system-ui, sans-serif;
   --cifra: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Menlo, monospace;
   --texto: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 
@@ -61,31 +68,34 @@
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --cafe: #E8BFA0;
-    --cafe-sobre: #452412;
-    --cafe-suave: #5E3419;
-    --cafe-suave-sobre: #F3D8C2;
-    --verde: #B8DDB2;
-    --verde-sobre: #1E3A1A;
-    --verde-suave: #2C5228;
-    --verde-suave-sobre: #CDE8C8;
+    --cafe: #F0C79E;
+    --cafe-sobre: #43210B;
+    --cafe-suave: #6B3C1C;
+    --cafe-suave-sobre: #FBE2C8;
 
-    --crema: #271C14;
-    --tinta: #EDE0D4;
-    --tenue: #B5A392;
-    --superficie: #32251B;
-    --superficie-var: #3C2D21;
-    --superficie-var-sobre: #E3D3C4;
-    --borde: #4A3929;
-    --borde-fuerte: #614B37;
+    --toros: #7BD94F;
+    --vacas: #FFC247;
 
-    --rojo: #FF8A80;
-    --rojo-suave: #5C1A1A;
-    --rojo-suave-sobre: #FFDAD6;
+    --crema: #241C15;
+    --tinta: #F2E7DA;
+    --tenue: #BAA895;
+    --superficie: #31261C;
+    --superficie-var: #3B2E22;
+    --superficie-var-sobre: #EADCCB;
+    --borde: #4C3B2B;
+    --borde-fuerte: #6A5339;
+    --dorado: #C79A3C;
 
-    --fondo-lejos: #120C08;
-    --fondo-cerca: #241A13;
-    --sombra: 0 18px 50px rgba(0, 0, 0, 0.55), 0 2px 8px rgba(0, 0, 0, 0.4);
+    --rojo: #FF8A7D;
+    --rojo-suave: #5E1A12;
+    --rojo-suave-sobre: #FFDED9;
+    --verde-suave: #2A4A17;
+    --verde-suave-sobre: #D6F0C4;
+    --marca-verde: #3C9E1C;
+    --marca-amarilla: #E0A412;
+    --marca-roja: #D33425;
+
+    --sombra: 0 22px 60px rgba(0, 0, 0, 0.6), 0 3px 10px rgba(0, 0, 0, 0.45);
     --velo: rgba(0, 0, 0, 0.66);
     color-scheme: dark;
   }
@@ -101,14 +111,38 @@ body {
   font-family: var(--texto);
   font-size: 15px;
   color: var(--tinta);
-  background: var(--fondo-cerca);
-  background:
-    radial-gradient(120% 90% at 50% 0%, var(--fondo-cerca) 0%, var(--fondo-lejos) 100%);
+  /* La ilustración del juego como telón. El degradado de abajo es el color
+     base: se ve igual mientras carga la imagen y si no llegara a cargar. */
+  background: linear-gradient(180deg, var(--cielo) 0%, var(--cielo-claro) 52%, var(--pasto) 100%);
   background-attachment: fixed;
   display: grid;
   justify-items: center;
   align-content: center;
   -webkit-font-smoothing: antialiased;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background: url("fondo.jpg") center / cover no-repeat;
+}
+
+/* Sobre la ilustración, un velo que baja el contraste del dibujo para que el
+   tablero siga siendo lo que se lee primero. */
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(180deg, rgba(8, 60, 100, 0.26), rgba(8, 60, 100, 0.42));
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) body::after {
+    background: linear-gradient(180deg, rgba(6, 16, 26, 0.72), rgba(6, 16, 26, 0.82));
+  }
 }
 
 [hidden] { display: none !important; }
@@ -145,8 +179,9 @@ button { font: inherit; color: inherit; cursor: pointer; border: none; backgroun
   body { padding: 28px; }
   #app {
     height: min(840px, calc(100dvh - 56px));
-    border-radius: 28px;
-    border: 1px solid var(--borde);
+    border-radius: 30px;
+    /* El filete dorado del ícono, que separa el tablero de la ilustración. */
+    border: 3px solid var(--dorado);
     box-shadow: var(--sombra);
   }
 }
@@ -180,25 +215,20 @@ button { font: inherit; color: inherit; cursor: pointer; border: none; backgroun
 }
 
 .marca .emblema {
-  width: 58px;
-  height: 58px;
-  display: grid;
-  place-items: center;
-  border-radius: 20px;
-  background: var(--cafe);
-  color: var(--cafe-sobre);
-  margin-bottom: 10px;
-  box-shadow: 0 6px 16px color-mix(in srgb, var(--cafe) 35%, transparent);
+  width: clamp(92px, 26vw, 116px);
+  height: clamp(92px, 26vw, 116px);
+  border-radius: 26px;
+  margin-bottom: 12px;
+  box-shadow: 0 10px 24px rgba(10, 60, 95, 0.3);
+  display: block;
 }
-
-.marca .emblema svg { width: 32px; height: 32px; }
 
 .titulo {
   font-family: var(--display);
   font-weight: 800;
-  font-size: clamp(2rem, 8.5vw, 2.5rem);
-  line-height: 1.05;
-  letter-spacing: -0.02em;
+  font-size: clamp(2.1rem, 9vw, 2.7rem);
+  line-height: 1;
+  letter-spacing: 0.01em;
   color: var(--cafe);
   margin: 0;
   text-wrap: balance;
@@ -246,6 +276,12 @@ button { font: inherit; color: inherit; cursor: pointer; border: none; backgroun
   font-weight: 700;
   font-size: 0.8rem;
   color: #fff;
+}
+
+.pista-def .simbolo {
+  font-family: var(--cifra);
+  font-weight: 700;
+  opacity: 0.75;
 }
 
 .nota { margin: 0; font-size: 0.8rem; line-height: 1.45; color: var(--tenue); }
@@ -429,8 +465,8 @@ button { font: inherit; color: inherit; cursor: pointer; border: none; backgroun
 
 .cabecera-columnas .hueco { flex: 1; }
 .cabecera-columnas .col { width: var(--pista); text-align: center; }
-.cabecera-columnas .toros { color: var(--cafe); }
-.cabecera-columnas .vacas { color: var(--verde); }
+.cabecera-columnas .toros { color: var(--toros); }
+.cabecera-columnas .vacas { color: var(--vacas); }
 
 .historial {
   flex: 1;
@@ -714,7 +750,7 @@ button { font: inherit; color: inherit; cursor: pointer; border: none; backgroun
 }
 
 .puesto.podio .medalla { background: var(--cafe); color: var(--cafe-sobre); }
-.puesto.reciente .medalla { background: var(--verde); color: var(--verde-sobre); }
+.puesto.reciente .medalla { background: var(--toros); color: #fff; }
 
 .puesto .jug {
   flex: 1; min-width: 0;
@@ -1187,17 +1223,9 @@ function pintar() {
 function pintarInicio() {
   vistas.inicio.innerHTML = `
     <div class="marca">
-      <span class="emblema" aria-hidden="true">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
-             stroke-linecap="round" stroke-linejoin="round">
-          <path d="M3 5c0 3 1.5 4.5 3 5"/>
-          <path d="M21 5c0 3-1.5 4.5-3 5"/>
-          <path d="M6 10c0-1.5 2.5-3 6-3s6 1.5 6 3c0 4-2.5 7-6 7s-6-3-6-7z"/>
-          <circle cx="10" cy="12" r=".9" fill="currentColor" stroke="none"/>
-          <circle cx="14" cy="12" r=".9" fill="currentColor" stroke="none"/>
-        </svg>
-      </span>
-      <h1 class="titulo">Vacas y Toros</h1>
+      <img class="emblema" src="icono-192.png" width="192" height="192" alt=""
+           fetchpriority="high">
+      <h1 class="titulo">Baca Toro</h1>
       <p class="bajada">Adivina el número secreto de ${LARGO_SECRETO} dígitos distintos en ${MAX_INTENTOS} intentos.</p>
     </div>
 
@@ -1205,12 +1233,12 @@ function pintarInicio() {
       <p class="rotulo">Las pistas</p>
       <div class="pistas-def">
         <div class="pista-def">
-          <span class="globo-def" style="background: var(--cafe)">2</span>
-          <span><strong>Toros:</strong> dígito correcto, en la posición correcta.</span>
+          <span class="globo-def" style="background: var(--toros)">2</span>
+          <span><strong>Toros <span class="simbolo">✓</span></strong> dígito correcto, en la posición correcta.</span>
         </div>
         <div class="pista-def">
-          <span class="globo-def" style="background: var(--verde)">1</span>
-          <span><strong>Vacas:</strong> dígito correcto, pero en otra posición.</span>
+          <span class="globo-def" style="background: var(--vacas); color: #3A2708">1</span>
+          <span><strong>Vacas <span class="simbolo">?</span></strong> dígito correcto, pero en otra posición.</span>
         </div>
       </div>
       <p class="nota">El 0 puede ir al principio y ningún dígito se repite.</p>
@@ -1277,17 +1305,17 @@ function pintarJuego() {
           return `<button class="celda jugada"${estilo}>${digito}</button>`;
         })
         .join("");
-      const globo = (cantidad, color) =>
+      const globo = (cantidad, color, colorTexto) =>
         cantidad > 0
-          ? `<span class="globo" style="background:${color};color:#fff">${cantidad}</span>`
-          : `<span class="globo" style="background:color-mix(in srgb, ${color} 10%, transparent);color:var(--tenue)">${cantidad}</span>`;
+          ? `<span class="globo" style="background:${color};color:${colorTexto}">${cantidad}</span>`
+          : `<span class="globo" style="background:color-mix(in srgb, ${color} 12%, transparent);color:var(--tenue)">${cantidad}</span>`;
       filas.push(`
         <div class="fila${intento.turno === turnoRecien ? " recien" : ""}" data-turno="${intento.turno}">
           <span class="num">${intento.turno}</span>
           <div class="celdas">${celdas}</div>
           <span class="relleno"></span>
-          <span class="pista">${globo(intento.marcador.toros, "var(--cafe)")}</span>
-          <span class="pista">${globo(intento.marcador.vacas, "var(--verde)")}</span>
+          <span class="pista">${globo(intento.marcador.toros, "var(--toros)", "#fff")}</span>
+          <span class="pista">${globo(intento.marcador.vacas, "var(--vacas)", "#3A2708")}</span>
         </div>
       `);
     } else if (i === intentosUsados() && !terminada()) {
