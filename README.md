@@ -1,12 +1,16 @@
-# Vacas y Toros
+# Baca Toro
 
 Juego de adivinanza numérica para el navegador. Hay que descubrir un número
 secreto de **4 dígitos distintos** (puede empezar con 0) en **10 intentos**.
 
 Cada intento devuelve dos pistas:
 
-- **Toros**: dígitos correctos que además están en la posición correcta.
-- **Vacas**: dígitos correctos que están en otra posición.
+- **Toros** (verde ✓): dígitos correctos que además están en la posición correcta.
+- **Vacas** (ámbar ?): dígitos correctos que están en otra posición.
+
+Los dos colores son los mismos que usan las marcas que anota el jugador, así
+que el verde quiere decir *va en esa posición* y el ámbar *está pero corrido*
+en cualquier parte de la pantalla.
 
 ## Cómo se juega
 
@@ -51,8 +55,22 @@ entre dispositivos.
 
 ## Cómo correrlo
 
-Es un solo archivo sin dependencias ni compilación. Basta con abrir
-`index.html` en el navegador.
+No tiene dependencias ni compilación: son un HTML y dos imágenes.
+
+Como el navegador no carga imágenes vecinas al abrir un archivo con doble
+clic, conviene levantarlo con un servidor:
+
+```bash
+npx serve .
+```
+
+## Qué hay en la carpeta
+
+| Archivo | Para qué |
+| --- | --- |
+| `index.html` | El juego entero: estructura, estilos y lógica. |
+| `fondo.jpg` | La lámina de la vaca y el toro, de telón de fondo. |
+| `icono-192.png` | Ícono de la portada, favicon y pantalla de inicio. |
 
 Para probarlo como lo verá el visitante, con un servidor local:
 
