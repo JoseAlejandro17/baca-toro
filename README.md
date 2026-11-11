@@ -1,78 +1,101 @@
-# Baca Toro
+# Juegos numéricos
 
-Juego de adivinanza numérica para el navegador. Hay que descubrir un número
-secreto de **4 dígitos distintos** (puede empezar con 0) en **10 intentos**.
+Dos juegos de lápiz y papel para el navegador. Al entrar se elige cuál jugar.
 
-Cada intento devuelve dos pistas:
+No hay compilación ni dependencias: son tres páginas HTML, una hoja de estilos
+y dos imágenes.
+
+| Archivo | Qué es |
+| --- | --- |
+| `index.html` | La portada, donde se elige el juego. |
+| `baca-toro.html` | Baca Toro. |
+| `sudoku.html` | Sudoku. |
+| `comun.css` | Paleta, marco, barra, botones, diálogos y ranking, compartidos. |
+| `fondo.jpg` | La lámina de la vaca y el toro, de telón de fondo. |
+| `icono-192.png` | Ícono de la portada, favicon y pantalla de inicio. |
+
+---
+
+## Baca Toro
+
+Hay que descubrir un número secreto de **4 dígitos distintos** (puede empezar
+con 0) en **10 intentos**. Cada intento devuelve dos pistas:
 
 - **Toros** (verde ✓): dígitos correctos que además están en la posición correcta.
 - **Vacas** (ámbar ?): dígitos correctos que están en otra posición.
 
-Los dos colores son los mismos que usan las marcas que anota el jugador, así
-que el verde quiere decir *va en esa posición* y el ámbar *está pero corrido*
-en cualquier parte de la pantalla.
-
-## Cómo se juega
-
 El intento se escribe en la **misma fila de la tabla** donde después se marcan
-los colores:
+los colores: se toca la celda, se elige el dígito en el selector de abajo y la
+selección corre sola a la derecha. En el selector se apagan los dígitos que ya
+están en otra celda, porque el número secreto nunca repite.
 
-1. Se toca la celda donde va el dígito.
-2. Se elige el dígito en el selector de abajo.
-3. La selección corre sola a la derecha, sin borrar lo que ya hubiera.
-4. Para corregir, se toca la celda y se elige otro dígito.
+Tocar un dígito ya jugado le da vuelta el color, como anotar en papel: verde,
+amarillo, rojo y de vuelta a sin marcar. Son anotaciones del jugador; el juego
+no las corrige ni las usa. Arriba hay una tira del 0 al 9 con las mismas marcas.
 
-El botón **Probar** se activa cuando las cuatro celdas están llenas. En el
-selector se apagan los dígitos que ya están en otra celda de la fila, porque el
-número secreto nunca repite dígitos.
+Desde el octavo intento la pantalla se tiñe de rojo y avisa cuántos quedan.
 
-En el computador también sirve el teclado: números para escribir, flechas para
-moverse entre celdas, Enter para probar y Retroceso para borrar.
+**Ranking:** menos intentos primero y, a igual cantidad, menos tiempo.
 
-### Marcado a mano
+---
 
-Tocar un dígito ya jugado le da vuelta el color, como anotar en papel:
-**verde** (va ahí), **amarillo** (está pero corrido), **rojo** (no va) y de
-vuelta a sin marcar. Son anotaciones del jugador: el juego no las corrige ni
-las usa para nada.
+## Sudoku
 
-Arriba hay una **tira del 0 al 9** con las mismas marcas, para llevar el
-control de qué dígitos ya se descartaron.
+Completar la cuadrícula sin repetir números en ninguna fila, columna ni caja.
 
-### Alerta y reloj
+- **Tres tamaños:** 4×4 (cajas de 2×2), 6×6 (cajas de 2 de alto por 3 de ancho)
+  y 9×9 (cajas de 3×3).
+- **Cuatro niveles:** fácil, medio, difícil y experto, que cambian cuántas
+  casillas vienen vacías.
+- **Tres pistas por partida.** Cada una rellena una casilla y queda registrada.
+- **Notas:** con el modo encendido los números quedan chiquititos en la casilla,
+  para anotar candidatos. Al fijar un número, deja de ser candidato en todo lo
+  que esa casilla ve.
+- Los números repetidos se marcan en rojo apenas aparecen, y el contador de
+  cada tecla muestra cuántos faltan por colocar.
 
-Desde el octavo intento la pantalla se empieza a teñir de rojo y avisa cuántos
-intentos quedan. El cronómetro corre desde que parte la partida.
+**Ranking:** una tabla por cada combinación de tamaño y nivel. Va primero quien
+usó menos pistas y, a igual cantidad, quien demoró menos.
 
-### Ranking
+### Cómo se arma el tablero
 
-Cada partida ganada se guarda con nombre, intentos y tiempo. Ordena por menos
-intentos y, a igual cantidad, por menos tiempo. Las partidas perdidas o
-rendidas no entran.
+Primero se rellena una cuadrícula entera válida al azar. Después se van sacando
+casillas de a una, y cada vez se comprueba que el tablero **siga teniendo una
+sola solución**; la casilla que abriría una segunda respuesta se devuelve a su
+lugar. Por eso un tablero de experto puede quedar con una o dos casillas menos
+de las que pide el nivel: ahí ya no se puede sacar más sin que deje de ser un
+sudoku.
 
-El ranking es **local**: vive en el navegador de cada persona y no se comparte
-entre dispositivos.
+El contador de soluciones se detiene apenas encuentra la segunda, y ataca
+siempre la casilla con menos candidatos. Con eso el 9×9 de experto se arma en
+unos 30 ms.
+
+---
+
+## Teclado
+
+Las dos páginas se juegan con el dedo o con el teclado.
+
+| Tecla | Baca Toro | Sudoku |
+| --- | --- | --- |
+| `0`–`9` | escribe el dígito | escribe el número |
+| `←` `→` | cambia de celda | mueve por la fila |
+| `↑` `↓` | — | mueve por la columna |
+| `Enter` | prueba el intento | — |
+| `⌫` | borra la celda | borra la casilla |
+| `N` | — | enciende y apaga las notas |
+| `H` | — | usa una pista |
+
+## Dónde se guardan los récords
+
+En el navegador de cada persona (`localStorage`), así que no se comparten entre
+aparatos ni entre personas. El nombre del jugador se recuerda entre los dos
+juegos.
 
 ## Cómo correrlo
 
-No tiene dependencias ni compilación: son un HTML y dos imágenes.
-
-Como el navegador no carga imágenes vecinas al abrir un archivo con doble
-clic, conviene levantarlo con un servidor:
-
-```bash
-npx serve .
-```
-
-## Qué hay en la carpeta
-
-| Archivo | Para qué |
-| --- | --- |
-| `index.html` | El juego entero: estructura, estilos y lógica. |
-| `fondo.jpg` | La lámina de la vaca y el toro, de telón de fondo. |
-| `icono-192.png` | Ícono de la portada, favicon y pantalla de inicio. |
-
-Para probarlo como lo verá el visitante, con un servidor local:
+Conviene levantar un servidor: abriendo el archivo con doble clic, el navegador
+no carga la hoja de estilos ni las imágenes.
 
 ```bash
 npx serve .
@@ -80,7 +103,6 @@ npx serve .
 
 ## De dónde viene
 
-Es la versión web de una app Android escrita en Kotlin + Jetpack Compose. La
-lógica se portó entera a JavaScript y se verificó contra los mismos casos de
-prueba del proyecto original: toros y vacas, orden de validación, tramos de la
-alerta, formato del tiempo, escritura en la fila y desempate del ranking.
+Baca Toro es la versión web de una app Android escrita en Kotlin + Jetpack
+Compose. La lógica se portó entera a JavaScript y se verificó contra los mismos
+casos de prueba del proyecto original.

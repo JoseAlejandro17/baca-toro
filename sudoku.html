@@ -1,0 +1,1102 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Sudoku</title>
+<meta name="description" content="Sudoku de 4×4, 6×6 y 9×9, con cuatro niveles, pistas y cronómetro.">
+<meta name="theme-color" content="#1E9BE8">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=IBM+Plex+Mono:wght@500;600;700&display=swap">
+<link rel="icon" href="icono-192.png">
+<link rel="apple-touch-icon" href="icono-192.png">
+<link rel="stylesheet" href="comun.css">
+
+<style>
+/* La cuadrícula manda: ocupa el ancho disponible y el resto se acomoda
+   alrededor. Las líneas gruesas separan las cajas. */
+
+.opciones { display: flex; flex-direction: column; gap: 8px; width: 100%; text-align: left; }
+
+.grupo-opcion { display: flex; flex-direction: column; gap: 7px; }
+
+.botonera {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 7px;
+}
+
+.botonera.cuatro { grid-template-columns: repeat(2, 1fr); }
+
+.opcion {
+  padding: 11px 8px;
+  border-radius: 13px;
+  border: 1.5px solid var(--borde-fuerte);
+  background: var(--superficie);
+  color: var(--tinta);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  transition: border-color 150ms ease, background 150ms ease, transform 150ms ease;
+}
+
+.opcion:hover { border-color: var(--cafe); }
+.opcion:active { transform: scale(0.97); }
+
+.opcion[aria-pressed="true"] {
+  border-color: var(--cafe);
+  border-width: 2px;
+  background: var(--cafe-suave);
+  color: var(--cafe-suave-sobre);
+}
+
+.opcion .fuerte { font-family: var(--display); font-weight: 700; font-size: 1rem; line-height: 1.1; }
+.opcion .flojo { font-size: 0.68rem; color: var(--tenue); }
+.opcion[aria-pressed="true"] .flojo { color: inherit; opacity: 0.75; }
+
+/* --- Cuadrícula --------------------------------------------------------- */
+
+.zona-tablero {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  padding-block: 10px;
+}
+
+.tablero {
+  display: grid;
+  grid-template-columns: repeat(var(--n), 1fr);
+  width: 100%;
+  max-width: min(100%, 60vh);
+  aspect-ratio: 1;
+  background: var(--superficie);
+  border: 2.5px solid var(--linea-caja);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.celda-s {
+  border-right: 1px solid var(--linea);
+  border-bottom: 1px solid var(--linea);
+  background: transparent;
+  color: var(--puesto);
+  font-family: var(--cifra);
+  font-weight: 600;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  position: relative;
+  transition: background 120ms ease;
+  min-width: 0;
+}
+
+.celda-s.fin-col { border-right: none; }
+.celda-s.fin-fila { border-bottom: none; }
+.celda-s.caja-der { border-right: 2.5px solid var(--linea-caja); }
+.celda-s.caja-abajo { border-bottom: 2.5px solid var(--linea-caja); }
+
+.tablero.t4 { font-size: clamp(1.4rem, 9vw, 2rem); }
+.tablero.t6 { font-size: clamp(1.1rem, 6.5vw, 1.6rem); }
+.tablero.t9 { font-size: clamp(0.85rem, 4.6vw, 1.2rem); }
+
+.celda-s.dada { color: var(--tinta); font-weight: 700; }
+.celda-s.par { background: var(--realce-suave); }
+.celda-s.igual { background: var(--realce-igual); }
+.celda-s.elegida { background: var(--realce-fuerte); }
+.celda-s.choca { color: var(--rojo); }
+.celda-s.choca.dada { color: var(--rojo); }
+
+.celda-s.elegida::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 2.5px solid var(--cafe);
+  pointer-events: none;
+}
+
+.notas {
+  display: grid;
+  grid-template-columns: repeat(var(--nc), 1fr);
+  width: 100%;
+  height: 100%;
+  padding: 1px;
+}
+
+.notas span {
+  display: grid;
+  place-items: center;
+  font-size: 0.36em;
+  font-weight: 700;
+  color: var(--puesto);
+  opacity: 0.85;
+  line-height: 1;
+}
+
+/* --- Controles ---------------------------------------------------------- */
+
+.panel-datos {
+  flex: none;
+  display: flex;
+  gap: 7px;
+  padding-top: 10px;
+}
+
+.dato {
+  flex: 1;
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: 12px;
+  padding: 7px 4px;
+  text-align: center;
+}
+
+.dato .cifra {
+  font-family: var(--cifra);
+  font-weight: 700;
+  font-size: 1rem;
+  font-variant-numeric: tabular-nums;
+  display: block;
+  line-height: 1.2;
+}
+
+.dato .rotulo-dato {
+  font-size: 0.64rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--tenue);
+  font-weight: 700;
+}
+
+.teclado-s {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding-block: 10px 12px;
+  padding-bottom: max(12px, env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid var(--borde);
+  background: color-mix(in srgb, var(--superficie-var) 45%, transparent);
+}
+
+.digitos-s { display: grid; gap: 6px; }
+.digitos-s.c4 { grid-template-columns: repeat(4, 1fr); }
+.digitos-s.c5 { grid-template-columns: repeat(5, 1fr); }
+.digitos-s.c6 { grid-template-columns: repeat(6, 1fr); }
+
+.tecla-s {
+  height: 46px;
+  border-radius: 12px;
+  border: 1px solid var(--borde-fuerte);
+  background: var(--superficie);
+  color: var(--tinta);
+  font-family: var(--cifra);
+  font-weight: 600;
+  font-size: 1.25rem;
+  position: relative;
+  transition: transform 150ms ease, filter 150ms ease;
+}
+
+.tecla-s:hover:not(:disabled) { filter: brightness(0.97); }
+.tecla-s:active:not(:disabled) { transform: scale(0.94); }
+.tecla-s:disabled { opacity: 0.3; cursor: not-allowed; }
+
+.tecla-s .restan {
+  position: absolute;
+  right: 4px;
+  bottom: 2px;
+  font-size: 0.58rem;
+  font-weight: 700;
+  color: var(--tenue);
+}
+
+.acciones-s { display: flex; gap: 7px; }
+
+.accion {
+  flex: 1;
+  border: 1.5px solid var(--borde-fuerte);
+  border-radius: 999px;
+  padding: 10px 6px;
+  font-weight: 700;
+  font-size: 0.82rem;
+  color: var(--tinta);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  transition: background 150ms ease, border-color 150ms ease;
+}
+
+.accion:hover:not(:disabled) { background: var(--superficie-var); border-color: var(--cafe); }
+.accion:disabled { opacity: 0.38; cursor: not-allowed; }
+
+.accion[aria-pressed="true"] {
+  background: var(--cafe);
+  border-color: var(--cafe);
+  color: var(--cafe-sobre);
+}
+
+.cargando {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  color: var(--tenue);
+  font-size: 0.95rem;
+  gap: 10px;
+}
+
+.cargando .rueda {
+  width: 34px;
+  height: 34px;
+  border: 3px solid var(--borde);
+  border-top-color: var(--cafe);
+  border-radius: 50%;
+  animation: girar 800ms linear infinite;
+  margin-inline: auto;
+}
+
+@keyframes girar { to { transform: rotate(360deg) } }
+
+/* Colores propios del tablero, derivados de la paleta compartida. */
+:root {
+  --linea: #E6D9C2;
+  --linea-caja: #C6A878;
+  --puesto: #1769B8;
+  --realce-suave: #FBEFD8;
+  --realce-igual: #F7DCA6;
+  --realce-fuerte: #F0C98A;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --linea: #4A3A2A;
+    --linea-caja: #7E6341;
+    --puesto: #7FC4FF;
+    --realce-suave: #3C2E1E;
+    --realce-igual: #55401F;
+    --realce-fuerte: #6E5227;
+  }
+}
+
+@media (max-height: 700px) {
+  .tecla-s { height: 40px; font-size: 1.1rem; }
+  .teclado-s { gap: 6px; padding-block: 8px 10px; }
+  .panel-datos { padding-top: 6px; }
+}
+</style>
+</head>
+<body>
+
+<div id="app">
+  <section class="vista portada gutter" id="vista-config"></section>
+  <section class="vista" id="vista-juego" hidden></section>
+  <section class="vista" id="vista-ranking" hidden></section>
+  <div id="capa-dialogo"></div>
+</div>
+
+<script>
+"use strict";
+
+// ---------------------------------------------------------------------------
+// Reglas y geometría.
+//
+// Un sudoku de lado n se guarda como un arreglo plano de n*n casillas, con 0
+// para la casilla vacía. Las cajas no siempre son cuadradas: en el de 6 son
+// de 2 de alto por 3 de ancho.
+// ---------------------------------------------------------------------------
+
+const TAMANOS = {
+  4: { alto: 2, ancho: 2, nombre: "4 × 4", detalle: "16 casillas" },
+  6: { alto: 2, ancho: 3, nombre: "6 × 6", detalle: "36 casillas" },
+  9: { alto: 3, ancho: 3, nombre: "9 × 9", detalle: "81 casillas" },
+};
+
+/** Cuánto del tablero se vacía en cada nivel, como proporción. */
+const NIVELES = {
+  facil:    { nombre: "Fácil",    vacias: 0.40, detalle: "muchas pistas" },
+  medio:    { nombre: "Medio",    vacias: 0.52, detalle: "equilibrado" },
+  dificil:  { nombre: "Difícil",  vacias: 0.62, detalle: "hay que pensar" },
+  experto:  { nombre: "Experto",  vacias: 0.70, detalle: "para expertos" },
+};
+
+const PISTAS_POR_PARTIDA = 3;
+const MAX_LARGO_NOMBRE = 16;
+const NOMBRE_POR_DEFECTO = "Jugador";
+const LIMITE_RANKING = 50;
+
+const fila = (i, n) => Math.floor(i / n);
+const columna = (i, n) => i % n;
+
+/** Casillas de la misma caja que [i], sin incluirla. */
+function caja(i, n) {
+  const { alto, ancho } = TAMANOS[n];
+  const f0 = Math.floor(fila(i, n) / alto) * alto;
+  const c0 = Math.floor(columna(i, n) / ancho) * ancho;
+  const salida = [];
+  for (let f = f0; f < f0 + alto; f++) {
+    for (let c = c0; c < c0 + ancho; c++) {
+      const j = f * n + c;
+      if (j !== i) salida.push(j);
+    }
+  }
+  return salida;
+}
+
+/** Todas las casillas que ven a [i]: su fila, su columna y su caja. */
+function companeras(i, n) {
+  const vistas = new Set(caja(i, n));
+  const f = fila(i, n), c = columna(i, n);
+  for (let k = 0; k < n; k++) {
+    const porFila = f * n + k;
+    const porCol = k * n + c;
+    if (porFila !== i) vistas.add(porFila);
+    if (porCol !== i) vistas.add(porCol);
+  }
+  return [...vistas];
+}
+
+/** Tabla de companeras calculada una vez por tamaño; el solver la usa mucho. */
+const cacheCompaneras = {};
+function tablaCompaneras(n) {
+  if (!cacheCompaneras[n]) {
+    cacheCompaneras[n] = Array.from({ length: n * n }, (_, i) => companeras(i, n));
+  }
+  return cacheCompaneras[n];
+}
+
+/** Si poner [valor] en [i] no repite nada de lo que esa casilla ve. */
+function cabe(tab, i, valor, n, tabla) {
+  for (const j of tabla[i]) if (tab[j] === valor) return false;
+  return true;
+}
+
+function barajar(lista) {
+  for (let i = lista.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [lista[i], lista[j]] = [lista[j], lista[i]];
+  }
+  return lista;
+}
+
+/**
+ * Cuenta soluciones hasta [tope] y se detiene ahí.
+ *
+ * Para saber si un sudoku es bueno basta con distinguir "una sola solución"
+ * de "más de una", así que nunca hace falta contarlas todas.
+ */
+function contarSoluciones(tab, n, tope = 2) {
+  const tabla = tablaCompaneras(n);
+  const copia = tab.slice();
+  let encontradas = 0;
+
+  function buscar() {
+    // Se ataca primero la casilla con menos candidatos: así el árbol de
+    // búsqueda se poda temprano y hasta el de 9×9 se resuelve al instante.
+    let mejor = -1, mejores = null;
+    for (let i = 0; i < copia.length; i++) {
+      if (copia[i] !== 0) continue;
+      const posibles = [];
+      for (let v = 1; v <= n; v++) if (cabe(copia, i, v, n, tabla)) posibles.push(v);
+      if (posibles.length === 0) return false;
+      if (mejores === null || posibles.length < mejores.length) {
+        mejor = i; mejores = posibles;
+        if (posibles.length === 1) break;
+      }
+    }
+    if (mejor === -1) { encontradas++; return encontradas >= tope; }
+
+    for (const v of mejores) {
+      copia[mejor] = v;
+      if (buscar()) { copia[mejor] = 0; return true; }
+      copia[mejor] = 0;
+    }
+    return false;
+  }
+
+  buscar();
+  return encontradas;
+}
+
+/** Rellena un tablero entero válido, al azar. */
+function generarSolucion(n) {
+  const tabla = tablaCompaneras(n);
+  const tab = new Array(n * n).fill(0);
+
+  function llenar(i) {
+    if (i === tab.length) return true;
+    for (const v of barajar(Array.from({ length: n }, (_, k) => k + 1))) {
+      if (cabe(tab, i, v, n, tabla)) {
+        tab[i] = v;
+        if (llenar(i + 1)) return true;
+        tab[i] = 0;
+      }
+    }
+    return false;
+  }
+
+  llenar(0);
+  return tab;
+}
+
+/**
+ * Saca casillas mientras el tablero siga teniendo una única solución.
+ *
+ * Puede quedarse corto respecto a [objetivo]: en ese punto cada casilla que
+ * falta abriría una segunda solución, y un sudoku con dos respuestas no es
+ * un sudoku.
+ */
+function perforar(solucion, n, objetivo) {
+  const tab = solucion.slice();
+  let vacias = 0;
+  for (const i of barajar([...Array(n * n).keys()])) {
+    if (vacias >= objetivo) break;
+    const guardado = tab[i];
+    tab[i] = 0;
+    if (contarSoluciones(tab, n) === 1) vacias++;
+    else tab[i] = guardado;
+  }
+  return { tab, vacias };
+}
+
+function generarPartida(n, nivel) {
+  const solucion = generarSolucion(n);
+  const objetivo = Math.round(n * n * NIVELES[nivel].vacias);
+  const { tab } = perforar(solucion, n, objetivo);
+  return { solucion, inicial: tab };
+}
+
+/** Casillas con un número repetido entre las que se ven entre sí. */
+function choques(tab, n) {
+  const tabla = tablaCompaneras(n);
+  const malas = new Set();
+  for (let i = 0; i < tab.length; i++) {
+    if (tab[i] === 0) continue;
+    for (const j of tabla[i]) {
+      if (tab[j] === tab[i]) { malas.add(i); malas.add(j); }
+    }
+  }
+  return malas;
+}
+
+const estaCompleto = (tab) => tab.every((v) => v !== 0);
+
+/** mm:ss, o h:mm:ss si la partida fue larguísima. */
+function formatearTiempo(ms) {
+  const total = Math.floor(ms / 1000);
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  const dd = (x) => String(x).padStart(2, "0");
+  return h > 0 ? `${h}:${dd(m)}:${dd(s)}` : `${dd(m)}:${dd(s)}`;
+}
+
+// ---------------------------------------------------------------------------
+// Ranking guardado en este navegador, separado por tamaño y nivel.
+// ---------------------------------------------------------------------------
+
+const CLAVE_PUNTAJES = "sudoku_puntajes";
+const CLAVE_JUGADOR = "vacas_toros_ultimo_jugador";
+
+/** Menos pistas primero y, a igual cantidad, menos tiempo. */
+function ordenRanking(a, b) {
+  return a.pistas - b.pistas || a.tiempoMs - b.tiempoMs || a.fechaMs - b.fechaMs;
+}
+
+const claveTabla = (tam, nivel) => `${tam}-${nivel}`;
+
+function leerTodo() {
+  try {
+    const crudo = localStorage.getItem(CLAVE_PUNTAJES);
+    const datos = crudo ? JSON.parse(crudo) : {};
+    return datos && typeof datos === "object" && !Array.isArray(datos) ? datos : {};
+  } catch (e) {
+    // Datos corruptos o navegación privada: se parte de cero en vez de
+    // dejar el juego sin ranking.
+    return {};
+  }
+}
+
+function leerPuntajes(tam, nivel) {
+  const lista = leerTodo()[claveTabla(tam, nivel)];
+  if (!Array.isArray(lista)) return [];
+  return lista
+    .filter((p) => p && typeof p.jugador === "string")
+    .map((p) => ({
+      jugador: p.jugador,
+      pistas: Number(p.pistas) || 0,
+      tiempoMs: Number(p.tiempoMs) || 0,
+      fechaMs: Number(p.fechaMs) || 0,
+    }))
+    .sort(ordenRanking)
+    .slice(0, LIMITE_RANKING);
+}
+
+function guardarPuntaje(tam, nivel, puntaje) {
+  const todo = leerTodo();
+  const clave = claveTabla(tam, nivel);
+  const lista = leerPuntajes(tam, nivel).concat([puntaje]).sort(ordenRanking).slice(0, LIMITE_RANKING);
+  todo[clave] = lista;
+  try {
+    localStorage.setItem(CLAVE_PUNTAJES, JSON.stringify(todo));
+    localStorage.setItem(CLAVE_JUGADOR, puntaje.jugador);
+  } catch (e) { /* sin almacenamiento, el ranking dura lo que dure la pestaña */ }
+  return lista;
+}
+
+function leerUltimoJugador() {
+  try { return localStorage.getItem(CLAVE_JUGADOR) || ""; } catch (e) { return ""; }
+}
+
+function borrarPuntajes(tam, nivel) {
+  const todo = leerTodo();
+  delete todo[claveTabla(tam, nivel)];
+  try { localStorage.setItem(CLAVE_PUNTAJES, JSON.stringify(todo)); } catch (e) { /* nada que borrar */ }
+}
+
+// ---------------------------------------------------------------------------
+// Estado.
+// ---------------------------------------------------------------------------
+
+const estado = {
+  pantalla: "config",
+  jugador: "",
+  tam: 9,
+  nivel: "medio",
+  generando: false,
+  solucion: [],
+  inicial: [],
+  tablero: [],
+  notas: [],
+  seleccion: null,
+  modoNotas: false,
+  pistas: 0,
+  tiempoMs: 0,
+  inicioMs: 0,
+  ganada: false,
+  puntajes: [],
+  puntajeReciente: null,
+  dialogo: null,
+};
+
+let cronometro = null;
+
+const esDada = (i) => estado.inicial[i] !== 0;
+const pistasRestantes = () => PISTAS_POR_PARTIDA - estado.pistas;
+
+const esc = (texto) =>
+  String(texto).replace(/[&<>"']/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+// ---------------------------------------------------------------------------
+// Acciones.
+// ---------------------------------------------------------------------------
+
+function elegirTamano(n) { estado.tam = n; pintar(); }
+function elegirNivel(nivel) { estado.nivel = nivel; pintar(); }
+
+function empezarPartida() {
+  // Armar un 9×9 de experto toma un momento: se muestra el aviso y se genera
+  // en el siguiente cuadro, para que la pantalla alcance a dibujarse.
+  estado.pantalla = "juego";
+  estado.generando = true;
+  pintar();
+
+  setTimeout(() => {
+    const n = estado.tam;
+    const { solucion, inicial } = generarPartida(n, estado.nivel);
+    estado.solucion = solucion;
+    estado.inicial = inicial;
+    estado.tablero = inicial.slice();
+    estado.notas = Array.from({ length: n * n }, () => new Set());
+    estado.seleccion = inicial.findIndex((v) => v === 0);
+    estado.modoNotas = false;
+    estado.pistas = 0;
+    estado.tiempoMs = 0;
+    estado.ganada = false;
+    estado.puntajeReciente = null;
+    estado.generando = false;
+    arrancarCronometro();
+    pintar();
+  }, 30);
+}
+
+function arrancarCronometro() {
+  detenerCronometro();
+  estado.inicioMs = Date.now() - estado.tiempoMs;
+  cronometro = setInterval(() => {
+    estado.tiempoMs = Date.now() - estado.inicioMs;
+    const reloj = document.getElementById("reloj");
+    if (reloj) reloj.textContent = formatearTiempo(estado.tiempoMs);
+  }, 200);
+}
+
+function detenerCronometro() {
+  if (cronometro) clearInterval(cronometro);
+  cronometro = null;
+}
+
+function seleccionar(i) {
+  if (estado.ganada) return;
+  estado.seleccion = i;
+  pintar();
+}
+
+function escribir(valor) {
+  const i = estado.seleccion;
+  if (estado.ganada || i === null || esDada(i)) return;
+
+  if (estado.modoNotas) {
+    // Una nota sobre una casilla ya resuelta no tiene sentido.
+    if (estado.tablero[i] !== 0) return;
+    const notas = estado.notas[i];
+    if (notas.has(valor)) notas.delete(valor); else notas.add(valor);
+    pintar();
+    return;
+  }
+
+  // Volver a marcar el mismo número lo borra, que es lo que uno espera
+  // cuando se da cuenta del error.
+  estado.tablero[i] = estado.tablero[i] === valor ? 0 : valor;
+  if (estado.tablero[i] !== 0) {
+    estado.notas[i].clear();
+    // Al fijar un número, deja de ser candidato en todo lo que esa casilla ve.
+    for (const j of tablaCompaneras(estado.tam)[i]) estado.notas[j].delete(valor);
+  }
+  revisarSiGano();
+  pintar();
+}
+
+function borrar() {
+  const i = estado.seleccion;
+  if (estado.ganada || i === null || esDada(i)) return;
+  estado.tablero[i] = 0;
+  estado.notas[i].clear();
+  pintar();
+}
+
+function alternarNotas() {
+  if (estado.ganada) return;
+  estado.modoNotas = !estado.modoNotas;
+  pintar();
+}
+
+/** Revela la casilla elegida, o la primera vacía si no hay ninguna elegida. */
+function usarPista() {
+  if (estado.ganada || pistasRestantes() <= 0) return;
+  let i = estado.seleccion;
+  if (i === null || estado.tablero[i] === estado.solucion[i]) {
+    i = estado.tablero.findIndex((v, k) => v !== estado.solucion[k]);
+  }
+  if (i < 0) return;
+
+  estado.tablero[i] = estado.solucion[i];
+  estado.notas[i].clear();
+  for (const j of tablaCompaneras(estado.tam)[i]) estado.notas[j].delete(estado.solucion[i]);
+  estado.pistas++;
+  estado.seleccion = i;
+  revisarSiGano();
+  pintar();
+}
+
+function revisarSiGano() {
+  if (!estaCompleto(estado.tablero)) return;
+  if (estado.tablero.some((v, i) => v !== estado.solucion[i])) return;
+
+  estado.ganada = true;
+  detenerCronometro();
+  estado.tiempoMs = Date.now() - estado.inicioMs;
+
+  const puntaje = {
+    jugador: estado.jugador.trim() || NOMBRE_POR_DEFECTO,
+    pistas: estado.pistas,
+    tiempoMs: estado.tiempoMs,
+    fechaMs: Date.now(),
+  };
+  estado.puntajeReciente = puntaje;
+  estado.puntajes = guardarPuntaje(estado.tam, estado.nivel, puntaje);
+}
+
+function irA(pantalla) {
+  if (pantalla !== "juego") detenerCronometro();
+  else if (!estado.ganada && estado.tablero.length) arrancarCronometro();
+  if (pantalla === "ranking") estado.puntajes = leerPuntajes(estado.tam, estado.nivel);
+  estado.pantalla = pantalla;
+  pintar();
+}
+
+function abandonar() {
+  detenerCronometro();
+  estado.dialogo = null;
+  estado.tablero = [];
+  estado.pantalla = "config";
+  pintar();
+}
+
+// ---------------------------------------------------------------------------
+// Dibujo.
+// ---------------------------------------------------------------------------
+
+const vistas = {
+  config: document.getElementById("vista-config"),
+  juego: document.getElementById("vista-juego"),
+  ranking: document.getElementById("vista-ranking"),
+};
+const capaDialogo = document.getElementById("capa-dialogo");
+
+function pintar() {
+  for (const [nombre, nodo] of Object.entries(vistas)) nodo.hidden = nombre !== estado.pantalla;
+  if (estado.pantalla === "config") pintarConfig();
+  if (estado.pantalla === "juego") pintarJuego();
+  if (estado.pantalla === "ranking") pintarRanking();
+  pintarDialogo();
+}
+
+function pintarConfig() {
+  const tamanos = Object.entries(TAMANOS).map(([n, t]) => `
+    <button class="opcion" data-tamano="${n}" aria-pressed="${Number(n) === estado.tam}">
+      <span class="fuerte">${t.nombre}</span>
+      <span class="flojo">${t.detalle}</span>
+    </button>
+  `).join("");
+
+  const niveles = Object.entries(NIVELES).map(([clave, nv]) => `
+    <button class="opcion" data-nivel="${clave}" aria-pressed="${clave === estado.nivel}">
+      <span class="fuerte">${nv.nombre}</span>
+      <span class="flojo">${nv.detalle}</span>
+    </button>
+  `).join("");
+
+  vistas.config.innerHTML = `
+    <a class="volver" href="index.html">← Juegos</a>
+
+    <div class="marca">
+      <h1 class="titulo">Sudoku</h1>
+      <p class="bajada">Completa la cuadrícula sin repetir números en ninguna fila, columna ni caja.</p>
+    </div>
+
+    <div class="opciones">
+      <div class="grupo-opcion">
+        <p class="rotulo">Tamaño</p>
+        <div class="botonera">${tamanos}</div>
+      </div>
+      <div class="grupo-opcion">
+        <p class="rotulo">Nivel</p>
+        <div class="botonera cuatro">${niveles}</div>
+      </div>
+    </div>
+
+    <div class="tarjeta-reglas">
+      <p class="rotulo">Cómo se juega</p>
+      <p class="nota">Toca una casilla vacía y elige el número. Volver a tocar el mismo número lo borra.</p>
+      <p class="nota">Con <strong>Notas</strong> encendido, los números quedan chiquititos en la esquina: sirven para anotar los candidatos sin comprometerse.</p>
+      <p class="nota">Tienes <strong>${PISTAS_POR_PARTIDA} pistas</strong> por partida. Cada una rellena una casilla, y quedan registradas: en el ranking va primero quien usó menos.</p>
+      <p class="nota">Los números repetidos se marcan en rojo apenas aparecen.</p>
+    </div>
+
+    <div class="campo">
+      <label for="nombre">¿Quién juega?</label>
+      <input id="nombre" type="text" maxlength="${MAX_LARGO_NOMBRE}"
+             placeholder="${NOMBRE_POR_DEFECTO}" value="${esc(estado.jugador)}"
+             autocomplete="nickname" enterkeyhint="go">
+      <span class="ayuda">Con este nombre entras al ranking.</span>
+    </div>
+
+    <button class="boton" id="btn-jugar">Jugar</button>
+    <button class="boton-linea" id="btn-ver-ranking">Ver ranking</button>
+  `;
+
+  vistas.config.querySelectorAll("[data-tamano]").forEach((b) =>
+    b.addEventListener("click", () => elegirTamano(Number(b.dataset.tamano))));
+  vistas.config.querySelectorAll("[data-nivel]").forEach((b) =>
+    b.addEventListener("click", () => elegirNivel(b.dataset.nivel)));
+
+  const nombre = vistas.config.querySelector("#nombre");
+  nombre.addEventListener("input", (e) => {
+    estado.jugador = e.target.value.slice(0, MAX_LARGO_NOMBRE);
+  });
+  nombre.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); empezarPartida(); }
+  });
+
+  vistas.config.querySelector("#btn-jugar").addEventListener("click", empezarPartida);
+  vistas.config.querySelector("#btn-ver-ranking").addEventListener("click", () => irA("ranking"));
+}
+
+function barraJuego() {
+  return `
+    <header class="barra gutter">
+      <div class="quien">
+        <div class="nombre">${TAMANOS[estado.tam].nombre} · ${NIVELES[estado.nivel].nombre}</div>
+        <div class="turno">${esc(estado.jugador.trim() || NOMBRE_POR_DEFECTO)}</div>
+      </div>
+      <span class="reloj" id="reloj">${formatearTiempo(estado.tiempoMs)}</span>
+      <button class="salir" id="btn-salir">Salir</button>
+    </header>
+  `;
+}
+
+function pintarJuego() {
+  if (estado.generando) {
+    vistas.juego.innerHTML = `
+      ${barraJuego()}
+      <div class="cargando gutter">
+        <div>
+          <div class="rueda"></div>
+          <p style="margin-top:12px">Armando un tablero con una sola solución…</p>
+        </div>
+      </div>
+    `;
+    vistas.juego.querySelector("#btn-salir").addEventListener("click", abandonar);
+    return;
+  }
+
+  const n = estado.tam;
+  const { alto, ancho } = TAMANOS[n];
+  const malas = choques(estado.tablero, n);
+  const sel = estado.seleccion;
+  const valorSel = sel !== null ? estado.tablero[sel] : 0;
+  const colsNotas = Math.ceil(Math.sqrt(n));
+
+  const vistasDesdeSel = sel !== null ? new Set(tablaCompaneras(n)[sel]) : new Set();
+
+  const casillas = estado.tablero.map((valor, i) => {
+    const clases = ["celda-s"];
+    if (esDada(i)) clases.push("dada");
+    if (columna(i, n) === n - 1) clases.push("fin-col");
+    else if (columna(i, n) % ancho === ancho - 1) clases.push("caja-der");
+    if (fila(i, n) === n - 1) clases.push("fin-fila");
+    else if (fila(i, n) % alto === alto - 1) clases.push("caja-abajo");
+
+    if (i === sel) clases.push("elegida");
+    else if (vistasDesdeSel.has(i)) clases.push("par");
+    if (valor !== 0 && valor === valorSel && i !== sel) clases.push("igual");
+    if (malas.has(i)) clases.push("choca");
+
+    let dentro = "";
+    if (valor !== 0) {
+      dentro = String(valor);
+    } else if (estado.notas[i].size > 0) {
+      const marcas = [];
+      for (let v = 1; v <= n; v++) marcas.push(`<span>${estado.notas[i].has(v) ? v : ""}</span>`);
+      dentro = `<span class="notas" style="--nc:${colsNotas}">${marcas.join("")}</span>`;
+    }
+
+    return `<button class="${clases.join(" ")}" data-casilla="${i}"
+      aria-label="Fila ${fila(i, n) + 1}, columna ${columna(i, n) + 1}">${dentro}</button>`;
+  }).join("");
+
+  // Cuántas veces falta cada número, para ir apagando las teclas resueltas.
+  const faltan = {};
+  for (let v = 1; v <= n; v++) faltan[v] = n;
+  for (const v of estado.tablero) if (v !== 0) faltan[v]--;
+
+  const teclas = Array.from({ length: n }, (_, k) => {
+    const v = k + 1;
+    const listo = faltan[v] <= 0;
+    return `<button class="tecla-s" data-digito="${v}"${listo ? " disabled" : ""}>${v}${
+      listo ? "" : `<span class="restan">${faltan[v]}</span>`}</button>`;
+  }).join("");
+
+  const abajo = estado.ganada ? `
+    <div class="panel-final gano gutter">
+      <h2>¡Resuelto!</h2>
+      <p>${TAMANOS[n].nombre} ${NIVELES[estado.nivel].nombre.toLowerCase()} en ${formatearTiempo(estado.tiempoMs)}.</p>
+      <p class="guardado">${estado.pistas === 0
+        ? "Sin usar ninguna pista."
+        : `Con ${estado.pistas} ${estado.pistas === 1 ? "pista" : "pistas"}.`} Guardado en el ranking.</p>
+      <div class="par-botones">
+        <button class="boton-linea" id="btn-ranking-final">Ranking</button>
+        <button class="boton" id="btn-otra-vez">Otra vez</button>
+      </div>
+    </div>
+  ` : `
+    <div class="teclado-s gutter">
+      <div class="digitos-s c${n === 9 ? 5 : n}">${teclas}</div>
+      <div class="acciones-s">
+        <button class="accion" id="btn-notas" aria-pressed="${estado.modoNotas}">Notas</button>
+        <button class="accion" id="btn-borrar">Borrar</button>
+        <button class="accion" id="btn-pista"${pistasRestantes() <= 0 ? " disabled" : ""}>Pista ${pistasRestantes()}</button>
+      </div>
+    </div>
+  `;
+
+  vistas.juego.innerHTML = `
+    ${barraJuego()}
+    ${estado.ganada ? "" : `
+      <div class="panel-datos gutter">
+        <div class="dato"><span class="cifra">${estado.tablero.filter((v) => v === 0).length}</span><span class="rotulo-dato">Faltan</span></div>
+        <div class="dato"><span class="cifra">${malas.size}</span><span class="rotulo-dato">Repetidos</span></div>
+        <div class="dato"><span class="cifra">${estado.pistas}</span><span class="rotulo-dato">Pistas</span></div>
+      </div>
+    `}
+    <div class="zona-tablero gutter">
+      <div class="tablero t${n}" style="--n:${n}">${casillas}</div>
+    </div>
+    ${abajo}
+  `;
+
+  const v = vistas.juego;
+  v.querySelector("#btn-salir").addEventListener("click", () => {
+    if (estado.ganada) abandonar();
+    else { estado.dialogo = "salir"; pintar(); }
+  });
+
+  v.querySelectorAll("[data-casilla]").forEach((b) =>
+    b.addEventListener("click", () => seleccionar(Number(b.dataset.casilla))));
+  v.querySelectorAll("[data-digito]").forEach((b) =>
+    b.addEventListener("click", () => escribir(Number(b.dataset.digito))));
+
+  const bNotas = v.querySelector("#btn-notas");
+  if (bNotas) bNotas.addEventListener("click", alternarNotas);
+  const bBorrar = v.querySelector("#btn-borrar");
+  if (bBorrar) bBorrar.addEventListener("click", borrar);
+  const bPista = v.querySelector("#btn-pista");
+  if (bPista) bPista.addEventListener("click", usarPista);
+
+  const bOtra = v.querySelector("#btn-otra-vez");
+  if (bOtra) bOtra.addEventListener("click", empezarPartida);
+  const bRanking = v.querySelector("#btn-ranking-final");
+  if (bRanking) bRanking.addEventListener("click", () => irA("ranking"));
+}
+
+function pintarRanking() {
+  const puntajes = estado.puntajes;
+  const reciente = estado.puntajeReciente;
+
+  const cuerpo = puntajes.length === 0
+    ? `<div class="vacio gutter">Todavía no hay partidas resueltas<br>en ${TAMANOS[estado.tam].nombre} ${NIVELES[estado.nivel].nombre.toLowerCase()}.</div>`
+    : `
+      <div class="tabla-cabecera gutter">
+        <span class="pos">#</span>
+        <span class="jug">Jugador</span>
+        <span class="int">Pistas</span>
+        <span class="tie">Tiempo</span>
+      </div>
+      <div class="lista-ranking gutter">
+        ${puntajes.map((p, i) => {
+          const pos = i + 1;
+          const esReciente = reciente &&
+            p.jugador === reciente.jugador &&
+            p.pistas === reciente.pistas &&
+            p.tiempoMs === reciente.tiempoMs &&
+            p.fechaMs === reciente.fechaMs;
+          const clase = esReciente ? "reciente" : pos <= 3 ? "podio" : "";
+          return `
+            <div class="puesto ${clase}">
+              <span class="pos"><span class="medalla">${pos}</span></span>
+              <span class="jug">${esc(p.jugador)}</span>
+              <span class="int">${p.pistas}</span>
+              <span class="tie">${formatearTiempo(p.tiempoMs)}</span>
+            </div>
+          `;
+        }).join("")}
+      </div>
+      <div class="pie-ranking gutter">
+        <button class="boton-linea" id="btn-borrar-ranking">Borrar esta tabla</button>
+      </div>
+    `;
+
+  vistas.ranking.innerHTML = `
+    <header class="barra gutter">
+      <div class="quien">
+        <div class="nombre">Ranking</div>
+        <div class="turno">${TAMANOS[estado.tam].nombre} · ${NIVELES[estado.nivel].nombre}</div>
+      </div>
+      <button class="salir" id="btn-volver">Volver</button>
+    </header>
+    ${cuerpo}
+  `;
+
+  vistas.ranking.querySelector("#btn-volver")
+    .addEventListener("click", () => irA(estado.tablero.length ? "juego" : "config"));
+
+  const borrar = vistas.ranking.querySelector("#btn-borrar-ranking");
+  if (borrar) borrar.addEventListener("click", () => { estado.dialogo = "borrar"; pintar(); });
+}
+
+function pintarDialogo() {
+  if (!estado.dialogo) { capaDialogo.innerHTML = ""; return; }
+
+  const textos = {
+    salir: {
+      titulo: "¿Dejar esta partida?",
+      cuerpo: "Se pierde el tablero y el tiempo que llevas.",
+      confirmar: "Sí, salir",
+    },
+    borrar: {
+      titulo: "¿Borrar esta tabla?",
+      cuerpo: `Se pierden los puntajes de ${TAMANOS[estado.tam].nombre} ${NIVELES[estado.nivel].nombre.toLowerCase()} y no se pueden recuperar.`,
+      confirmar: "Borrar",
+    },
+  }[estado.dialogo];
+
+  capaDialogo.innerHTML = `
+    <div class="velo" role="dialog" aria-modal="true" aria-labelledby="dlg-titulo">
+      <div class="dialogo">
+        <h2 id="dlg-titulo">${textos.titulo}</h2>
+        <p>${textos.cuerpo}</p>
+        <div class="opciones">
+          <button id="dlg-cancelar">Cancelar</button>
+          <button id="dlg-confirmar">${textos.confirmar}</button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  const cual = estado.dialogo;
+  capaDialogo.querySelector("#dlg-cancelar")
+    .addEventListener("click", () => { estado.dialogo = null; pintar(); });
+  capaDialogo.querySelector("#dlg-confirmar").addEventListener("click", () => {
+    estado.dialogo = null;
+    if (cual === "salir") abandonar();
+    else {
+      borrarPuntajes(estado.tam, estado.nivel);
+      estado.puntajes = [];
+      estado.puntajeReciente = null;
+      pintar();
+    }
+  });
+  capaDialogo.querySelector("#dlg-confirmar").focus();
+}
+
+// ---------------------------------------------------------------------------
+// Teclado físico.
+// ---------------------------------------------------------------------------
+
+document.addEventListener("keydown", (e) => {
+  if (estado.dialogo) {
+    if (e.key === "Escape") { estado.dialogo = null; pintar(); }
+    return;
+  }
+  if (estado.pantalla !== "juego" || estado.generando || estado.ganada) return;
+  if (e.target instanceof HTMLInputElement) return;
+
+  const n = estado.tam;
+  if (/^[1-9]$/.test(e.key) && Number(e.key) <= n) { e.preventDefault(); escribir(Number(e.key)); return; }
+  if (e.key === "Backspace" || e.key === "Delete") { e.preventDefault(); borrar(); return; }
+  if (e.key === "n" || e.key === "N") { e.preventDefault(); alternarNotas(); return; }
+  if (e.key === "h" || e.key === "H") { e.preventDefault(); usarPista(); return; }
+
+  const pasos = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -n, ArrowDown: n };
+  if (e.key in pasos && estado.seleccion !== null) {
+    e.preventDefault();
+    // Las flechas no dan la vuelta: en el borde izquierdo, izquierda no hace nada.
+    const destino = estado.seleccion + pasos[e.key];
+    const cruzaFila = Math.abs(pasos[e.key]) === 1 &&
+      fila(destino, n) !== fila(estado.seleccion, n);
+    if (destino >= 0 && destino < n * n && !cruzaFila) seleccionar(destino);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Arranque.
+// ---------------------------------------------------------------------------
+
+estado.jugador = leerUltimoJugador();
+pintar();
+</script>
+</body>
+</html>

@@ -1,0 +1,775 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Baca Toro</title>
+<meta name="description" content="Adivina el número secreto de 4 dígitos distintos en 10 intentos.">
+<meta name="theme-color" content="#1E9BE8">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=IBM+Plex+Mono:wght@500;600;700&display=swap">
+<link rel="icon" href="icono-192.png">
+<link rel="apple-touch-icon" href="icono-192.png">
+
+<link rel="stylesheet" href="comun.css">
+</head>
+<body>
+
+<div id="app">
+  <section class="vista portada gutter" id="vista-inicio"></section>
+  <section class="vista" id="vista-juego" hidden></section>
+  <section class="vista" id="vista-ranking" hidden></section>
+  <div id="capa-dialogo"></div>
+</div>
+
+<script>
+"use strict";
+
+// ---------------------------------------------------------------------------
+// Reglas del juego. Mismas que la versión Android, sin nada de interfaz.
+// ---------------------------------------------------------------------------
+
+const LARGO_SECRETO = 4;
+const MAX_INTENTOS = 10;
+const RESTANTES_PARA_ALERTA = 3;
+const INTENSIDAD_MAXIMA_ALERTA = 0.45;
+const MAX_LARGO_NOMBRE = 16;
+const NOMBRE_POR_DEFECTO = "Jugador";
+const LIMITE_RANKING = 50;
+const DIGITOS = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"];
+const MARCAS = ["ninguna", "verde", "amarilla", "roja"];
+
+/** Número secreto de dígitos distintos; puede empezar con 0, por eso es texto. */
+function generarSecreto(largo = LARGO_SECRETO) {
+  const bolsa = DIGITOS.slice();
+  for (let i = bolsa.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [bolsa[i], bolsa[j]] = [bolsa[j], bolsa[i]];
+  }
+  return bolsa.slice(0, largo).join("");
+}
+
+/** Toros: dígito correcto en su lugar. Vacas: correcto pero corrido. */
+function evaluarIntento(secreto, intento) {
+  let toros = 0;
+  let vacas = 0;
+  for (let i = 0; i < intento.length; i++) {
+    if (secreto[i] === intento[i]) toros++;
+    else if (secreto.includes(intento[i])) vacas++;
+  }
+  return { toros, vacas, esVictoria: toros === LARGO_SECRETO };
+}
+
+/** Motivo del rechazo, o null si el intento sirve. */
+function validarIntento(entrada, largo = LARGO_SECRETO, previos = []) {
+  if (entrada.length !== largo) return "largo";
+  if (!/^\d+$/.test(entrada)) return "noEsNumero";
+  if (new Set(entrada).size !== entrada.length) return "repetidos";
+  if (previos.includes(entrada)) return "yaIntentado";
+  return null;
+}
+
+const MENSAJES_ERROR = {
+  largo: `Te faltan dígitos: tienen que ser ${LARGO_SECRETO}.`,
+  noEsNumero: "Sólo se permiten dígitos del 0 al 9.",
+  repetidos: "Los dígitos no se pueden repetir.",
+  yaIntentado: "Ese número ya lo probaste.",
+};
+
+/** Cuán roja se pone la pantalla: 0 tranquilo, 1 último intento. */
+function nivelDeAlerta(usados) {
+  const restantes = MAX_INTENTOS - usados;
+  const tramos = RESTANTES_PARA_ALERTA + 1;
+  if (restantes > RESTANTES_PARA_ALERTA) return 0;
+  if (restantes <= 0) return 1;
+  return (tramos - restantes) / tramos;
+}
+
+/** mm:ss, o h:mm:ss si la partida fue larguísima. */
+function formatearTiempo(ms) {
+  const total = Math.floor(ms / 1000);
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  const dd = (n) => String(n).padStart(2, "0");
+  return h > 0 ? `${h}:${dd(m)}:${dd(s)}` : `${dd(m)}:${dd(s)}`;
+}
+
+/** Siguiente color del ciclo de marcas, para ir cambiándolas a toques. */
+function marcaSiguiente(marca) {
+  return MARCAS[(MARCAS.indexOf(marca) + 1) % MARCAS.length];
+}
+
+// ---------------------------------------------------------------------------
+// Fila en edición: se escribe tocando una celda y eligiendo abajo.
+// ---------------------------------------------------------------------------
+
+function filaVacia() {
+  return { digitos: Array(LARGO_SECRETO).fill(null), seleccion: 0 };
+}
+
+const filaTexto = (fila) => fila.digitos.filter((d) => d !== null).join("");
+const filaCompleta = (fila) => fila.digitos.every((d) => d !== null);
+
+/** No vale repetir un dígito que ya esté en otra celda. */
+const filaPermite = (fila, digito) =>
+  !fila.digitos.some((escrito, i) => escrito === digito && i !== fila.seleccion);
+
+/** Escribe y corre la selección a la derecha, sin borrar lo que ya había. */
+function filaConDigito(fila, digito) {
+  if (fila.seleccion === null) return fila;
+  const digitos = fila.digitos.slice();
+  digitos[fila.seleccion] = digito;
+  return { digitos, seleccion: Math.min(fila.seleccion + 1, LARGO_SECRETO - 1) };
+}
+
+function filaBorrada(fila) {
+  if (fila.seleccion === null) return fila;
+  const digitos = fila.digitos.slice();
+  digitos[fila.seleccion] = null;
+  return { digitos, seleccion: fila.seleccion };
+}
+
+// ---------------------------------------------------------------------------
+// Ranking guardado en este navegador.
+// ---------------------------------------------------------------------------
+
+const CLAVE_PUNTAJES = "vacas_toros_puntajes";
+const CLAVE_JUGADOR = "vacas_toros_ultimo_jugador";
+
+/** Menos intentos primero; a igual cantidad, menos tiempo. La fecha desempata. */
+function ordenRanking(a, b) {
+  return a.intentos - b.intentos || a.tiempoMs - b.tiempoMs || a.fechaMs - b.fechaMs;
+}
+
+function leerPuntajes() {
+  try {
+    const crudo = localStorage.getItem(CLAVE_PUNTAJES);
+    if (!crudo) return [];
+    const datos = JSON.parse(crudo);
+    if (!Array.isArray(datos)) return [];
+    return datos
+      .filter((p) => p && typeof p.jugador === "string")
+      .map((p) => ({
+        jugador: p.jugador,
+        intentos: Number(p.intentos) || 0,
+        tiempoMs: Number(p.tiempoMs) || 0,
+        fechaMs: Number(p.fechaMs) || 0,
+      }))
+      .sort(ordenRanking)
+      .slice(0, LIMITE_RANKING);
+  } catch (e) {
+    // Datos corruptos o navegación privada: se parte de cero en vez de
+    // dejar el juego sin ranking.
+    return [];
+  }
+}
+
+function guardarPuntaje(puntaje) {
+  const todos = leerPuntajes().concat([puntaje]).sort(ordenRanking).slice(0, LIMITE_RANKING);
+  try {
+    localStorage.setItem(CLAVE_PUNTAJES, JSON.stringify(todos));
+    localStorage.setItem(CLAVE_JUGADOR, puntaje.jugador);
+  } catch (e) { /* sin almacenamiento, el ranking dura lo que dure la pestaña */ }
+  return todos;
+}
+
+function leerUltimoJugador() {
+  try { return localStorage.getItem(CLAVE_JUGADOR) || ""; } catch (e) { return ""; }
+}
+
+function borrarPuntajes() {
+  try { localStorage.removeItem(CLAVE_PUNTAJES); } catch (e) { /* nada que borrar */ }
+}
+
+// ---------------------------------------------------------------------------
+// Estado de la aplicación.
+// ---------------------------------------------------------------------------
+
+const estado = {
+  pantalla: "inicio",
+  jugador: "",
+  secreto: generarSecreto(),
+  fila: filaVacia(),
+  intentos: [],
+  error: null,
+  partida: "enCurso",
+  marcasDigitos: Array(DIGITOS.length).fill("ninguna"),
+  secretoRevelado: null,
+  tiempoMs: 0,
+  inicioMs: 0,
+  puntajes: [],
+  puntajeReciente: null,
+  dialogo: null,
+};
+
+let cronometro = null;
+/** Turno que se acaba de jugar, para animarlo una sola vez al aparecer. */
+let turnoRecien = 0;
+
+const terminada = () => estado.partida !== "enCurso";
+const intentosUsados = () => estado.intentos.length;
+const intentosRestantes = () => MAX_INTENTOS - intentosUsados();
+const puedeProbar = () => !terminada() && filaCompleta(estado.fila);
+const colorDeMarca = (marca) => (marca === "ninguna" ? null : `var(--marca-${marca})`);
+const colorDeTexto = (marca) =>
+  marca === "ninguna" ? "var(--tinta)" : marca === "amarilla" ? "#000" : "#fff";
+
+const esc = (texto) =>
+  String(texto).replace(/[&<>"']/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+// ---------------------------------------------------------------------------
+// Acciones.
+// ---------------------------------------------------------------------------
+
+function empezarPartida() {
+  estado.secreto = generarSecreto();
+  estado.fila = filaVacia();
+  estado.intentos = [];
+  estado.error = null;
+  estado.partida = "enCurso";
+  estado.marcasDigitos = Array(DIGITOS.length).fill("ninguna");
+  estado.secretoRevelado = null;
+  estado.tiempoMs = 0;
+  estado.puntajeReciente = null;
+  estado.pantalla = "juego";
+  turnoRecien = 0;
+  arrancarCronometro();
+  pintar();
+}
+
+function arrancarCronometro() {
+  detenerCronometro();
+  estado.inicioMs = Date.now() - estado.tiempoMs;
+  cronometro = setInterval(() => {
+    estado.tiempoMs = Date.now() - estado.inicioMs;
+    const reloj = document.getElementById("reloj");
+    if (reloj) reloj.textContent = formatearTiempo(estado.tiempoMs);
+  }, 200);
+}
+
+function detenerCronometro() {
+  if (cronometro) clearInterval(cronometro);
+  cronometro = null;
+}
+
+function seleccionarCelda(pos) {
+  if (terminada()) return;
+  estado.fila = { digitos: estado.fila.digitos.slice(), seleccion: pos };
+  estado.error = null;
+  pintar();
+}
+
+function escribirDigito(digito) {
+  if (terminada() || !filaPermite(estado.fila, digito)) return;
+  estado.fila = filaConDigito(estado.fila, digito);
+  estado.error = null;
+  pintar();
+}
+
+function borrarDigito() {
+  if (terminada()) return;
+  estado.fila = filaBorrada(estado.fila);
+  estado.error = null;
+  pintar();
+}
+
+function cambiarMarca(turno, posicion) {
+  const intento = estado.intentos.find((i) => i.turno === turno);
+  if (!intento) return;
+  intento.marcas[posicion] = marcaSiguiente(intento.marcas[posicion]);
+  pintar();
+}
+
+function cambiarMarcaDigito(digito) {
+  const pos = DIGITOS.indexOf(digito);
+  if (pos < 0) return;
+  estado.marcasDigitos[pos] = marcaSiguiente(estado.marcasDigitos[pos]);
+  pintar();
+}
+
+function limpiarMarcas() {
+  estado.marcasDigitos = Array(DIGITOS.length).fill("ninguna");
+  pintar();
+}
+
+function probar() {
+  if (terminada()) return;
+  const numero = filaTexto(estado.fila);
+  const error = validarIntento(numero, LARGO_SECRETO, estado.intentos.map((i) => i.numero));
+  if (error) {
+    estado.error = error;
+    pintar();
+    return;
+  }
+
+  const marcador = evaluarIntento(estado.secreto, numero);
+  estado.intentos.push({
+    turno: estado.intentos.length + 1,
+    numero,
+    marcador,
+    marcas: Array(numero.length).fill("ninguna"),
+  });
+  turnoRecien = estado.intentos.length;
+
+  if (marcador.esVictoria) estado.partida = "ganada";
+  else if (estado.intentos.length >= MAX_INTENTOS) estado.partida = "perdida";
+
+  estado.fila = filaVacia();
+  estado.error = null;
+  if (terminada()) {
+    estado.secretoRevelado = estado.secreto;
+    terminar();
+  }
+  pintar();
+}
+
+function confirmarRendirse() {
+  if (terminada()) return;
+  estado.fila = { digitos: estado.fila.digitos.slice(), seleccion: null };
+  estado.error = null;
+  estado.partida = "rendida";
+  estado.secretoRevelado = estado.secreto;
+  estado.dialogo = null;
+  terminar();
+  pintar();
+}
+
+/** Cierra el tiempo y, si ganó, entra al ranking. */
+function terminar() {
+  detenerCronometro();
+  estado.tiempoMs = Date.now() - estado.inicioMs;
+  if (estado.partida !== "ganada") return;
+
+  const puntaje = {
+    jugador: estado.jugador.trim() || NOMBRE_POR_DEFECTO,
+    intentos: intentosUsados(),
+    tiempoMs: estado.tiempoMs,
+    fechaMs: Date.now(),
+  };
+  estado.puntajeReciente = puntaje;
+  estado.puntajes = guardarPuntaje(puntaje);
+}
+
+function irA(pantalla) {
+  if (pantalla !== "juego") detenerCronometro();
+  else if (!terminada() && estado.intentos.length >= 0 && cronometro === null) arrancarCronometro();
+  if (pantalla === "ranking") estado.puntajes = leerPuntajes();
+  estado.pantalla = pantalla;
+  pintar();
+}
+
+// ---------------------------------------------------------------------------
+// Dibujo de las pantallas.
+// ---------------------------------------------------------------------------
+
+const vistas = {
+  inicio: document.getElementById("vista-inicio"),
+  juego: document.getElementById("vista-juego"),
+  ranking: document.getElementById("vista-ranking"),
+};
+const capaDialogo = document.getElementById("capa-dialogo");
+
+function pintar() {
+  for (const [nombre, nodo] of Object.entries(vistas)) nodo.hidden = nombre !== estado.pantalla;
+
+  if (estado.pantalla === "inicio") pintarInicio();
+  if (estado.pantalla === "juego") pintarJuego();
+  if (estado.pantalla === "ranking") pintarRanking();
+
+  const alerta = estado.pantalla === "juego" && !terminada() ? nivelDeAlerta(intentosUsados()) : 0;
+  document.documentElement.style.setProperty(
+    "--mezcla",
+    `${(alerta * INTENSIDAD_MAXIMA_ALERTA * 100).toFixed(1)}%`
+  );
+
+  pintarDialogo();
+}
+
+function pintarInicio() {
+  vistas.inicio.innerHTML = `
+    <a class="volver" href="index.html">← Juegos</a>
+
+    <div class="marca">
+      <img class="emblema" src="icono-192.png" width="192" height="192" alt=""
+           fetchpriority="high">
+      <h1 class="titulo">Baca Toro</h1>
+      <p class="bajada">Adivina el número secreto de ${LARGO_SECRETO} dígitos distintos en ${MAX_INTENTOS} intentos.</p>
+    </div>
+
+    <div class="tarjeta-reglas">
+      <p class="rotulo">Las pistas</p>
+      <div class="pistas-def">
+        <div class="pista-def">
+          <span class="globo-def" style="background: var(--toros)">2</span>
+          <span><strong>Toros <span class="simbolo">✓</span></strong> dígito correcto, en la posición correcta.</span>
+        </div>
+        <div class="pista-def">
+          <span class="globo-def" style="background: var(--vacas); color: #3A2708">1</span>
+          <span><strong>Vacas <span class="simbolo">?</span></strong> dígito correcto, pero en otra posición.</span>
+        </div>
+      </div>
+      <p class="nota">El 0 puede ir al principio y ningún dígito se repite.</p>
+
+      <p class="rotulo" style="padding-top: 4px">Tus marcas</p>
+      <p class="nota">Toca un dígito jugado para ir anotando lo que deduces:</p>
+      <div class="leyendas">
+        <div class="leyenda">
+          <span class="muestra" style="background: var(--marca-verde); color: #fff">8</span>
+          <span>va en esa posición</span>
+        </div>
+        <div class="leyenda">
+          <span class="muestra" style="background: var(--marca-amarilla); color: #000">3</span>
+          <span>está, pero en otra posición</span>
+        </div>
+        <div class="leyenda">
+          <span class="muestra" style="background: var(--marca-roja); color: #fff">0</span>
+          <span>no va en el número</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="campo">
+      <label for="nombre">¿Quién juega?</label>
+      <input id="nombre" type="text" maxlength="${MAX_LARGO_NOMBRE}"
+             placeholder="${NOMBRE_POR_DEFECTO}" value="${esc(estado.jugador)}"
+             autocomplete="nickname" enterkeyhint="go">
+      <span class="ayuda">Con este nombre entras al ranking.</span>
+    </div>
+
+    <button class="boton" id="btn-jugar">Jugar</button>
+    <button class="boton-linea" id="btn-ver-ranking">Ver ranking</button>
+  `;
+
+  const nombre = vistas.inicio.querySelector("#nombre");
+  nombre.addEventListener("input", (e) => {
+    estado.jugador = e.target.value.slice(0, MAX_LARGO_NOMBRE);
+  });
+  nombre.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); empezarPartida(); }
+  });
+  vistas.inicio.querySelector("#btn-jugar").addEventListener("click", empezarPartida);
+  vistas.inicio.querySelector("#btn-ver-ranking").addEventListener("click", () => irA("ranking"));
+}
+
+function pintarJuego() {
+  const alerta = nivelDeAlerta(intentosUsados());
+  const filas = [];
+
+  for (let i = 0; i < MAX_INTENTOS; i++) {
+    const intento = estado.intentos[i];
+    if (intento) {
+      const celdas = intento.numero
+        .split("")
+        .map((digito, pos) => {
+          const local = intento.marcas[pos];
+          const global = estado.marcasDigitos[DIGITOS.indexOf(digito)];
+          // La marca local manda; si no hay, se usa la de la tira de arriba.
+          const marca = local === "ninguna" ? global : local;
+          const fondo = colorDeMarca(marca);
+          const estilo = fondo
+            ? ` style="background:${fondo};color:${colorDeTexto(marca)};border-color:transparent"`
+            : "";
+          return `<button class="celda jugada"${estilo}>${digito}</button>`;
+        })
+        .join("");
+      const globo = (cantidad, color, colorTexto) =>
+        cantidad > 0
+          ? `<span class="globo" style="background:${color};color:${colorTexto}">${cantidad}</span>`
+          : `<span class="globo" style="background:color-mix(in srgb, ${color} 12%, transparent);color:var(--tenue)">${cantidad}</span>`;
+      filas.push(`
+        <div class="fila${intento.turno === turnoRecien ? " recien" : ""}" data-turno="${intento.turno}">
+          <span class="num">${intento.turno}</span>
+          <div class="celdas">${celdas}</div>
+          <span class="relleno"></span>
+          <span class="pista">${globo(intento.marcador.toros, "var(--toros)", "#fff")}</span>
+          <span class="pista">${globo(intento.marcador.vacas, "var(--vacas)", "#3A2708")}</span>
+        </div>
+      `);
+    } else if (i === intentosUsados() && !terminada()) {
+      const celdas = estado.fila.digitos
+        .map((digito, pos) => {
+          const elegida = pos === estado.fila.seleccion;
+          return `<button class="celda${elegida ? " elegida" : ""}" data-celda="${pos}">${digito ?? ""}</button>`;
+        })
+        .join("");
+      filas.push(`
+        <div class="fila">
+          <span class="num">${i + 1}</span>
+          <div class="celdas">${celdas}</div>
+          <span class="relleno"></span>
+          <button class="probar" id="btn-probar"${puedeProbar() ? "" : " disabled"}>Probar</button>
+        </div>
+      `);
+    } else {
+      filas.push(`
+        <div class="fila">
+          <span class="num"></span>
+          <div class="celdas">${'<span class="celda hueca"></span>'.repeat(LARGO_SECRETO)}</div>
+        </div>
+      `);
+    }
+  }
+
+  const tira = DIGITOS.map((digito, i) => {
+    const marca = estado.marcasDigitos[i];
+    const fondo = colorDeMarca(marca);
+    const estilo = fondo ? ` style="background:${fondo};color:${colorDeTexto(marca)};border-color:transparent"` : "";
+    return `<button data-marca-digito="${digito}"${estilo}>${digito}</button>`;
+  }).join("");
+
+  const teclas = DIGITOS.map((digito, i) => {
+    const marca = estado.marcasDigitos[i];
+    const permitido = filaPermite(estado.fila, digito);
+    const fondo = colorDeMarca(marca);
+    const estilo = fondo ? ` style="background:${fondo};color:${colorDeTexto(marca)};border-color:transparent"` : "";
+    return `<button class="tecla" data-digito="${digito}"${estilo}${permitido ? "" : " disabled"}>${digito}</button>`;
+  }).join("");
+
+  const abajo = terminada() ? panelFinal() : `
+    <div class="selector gutter">
+      <div class="teclas">${teclas}</div>
+      <div class="acciones">
+        <button class="boton-linea" id="btn-rendirse">Rendirse</button>
+        <button class="boton-linea" id="btn-borrar">Borrar</button>
+      </div>
+      <p class="atajo">También sirve el teclado: <kbd>0</kbd>–<kbd>9</kbd>, <kbd>←</kbd> <kbd>→</kbd>, <kbd>Enter</kbd> y <kbd>⌫</kbd></p>
+    </div>
+  `;
+
+  vistas.juego.innerHTML = `
+    <header class="barra gutter">
+      <div class="quien">
+        <div class="nombre">${esc(estado.jugador.trim() || NOMBRE_POR_DEFECTO)}</div>
+        <div class="turno">Intento ${Math.min(intentosUsados() + 1, MAX_INTENTOS)} de ${MAX_INTENTOS}</div>
+      </div>
+      <span class="reloj" id="reloj">${formatearTiempo(estado.tiempoMs)}</span>
+      <button class="salir" id="btn-salir">Salir</button>
+    </header>
+
+    <div class="bloque-tira gutter">
+      <div class="tira-cabecera">
+        <span class="rotulo">Dígitos descartados</span>
+        <button id="btn-limpiar">Limpiar</button>
+      </div>
+      <div class="tira">${tira}</div>
+    </div>
+
+    ${!terminada() && alerta > 0
+      ? `<div class="aviso-alerta gutter">${intentosRestantes() === 1 ? "¡Último intento!" : `Quedan ${intentosRestantes()} intentos`}</div>`
+      : ""}
+
+    <div class="cabecera-columnas gutter">
+      <span class="hueco"></span>
+      <span class="col toros">Toros</span>
+      <span class="col vacas">Vacas</span>
+    </div>
+
+    <div class="historial gutter">${filas.join("")}</div>
+
+    ${estado.error ? `<div class="error gutter">${MENSAJES_ERROR[estado.error]}</div>` : ""}
+    ${abajo}
+  `;
+
+  const v = vistas.juego;
+  v.querySelector("#btn-salir").addEventListener("click", () => irA("inicio"));
+  v.querySelector("#btn-limpiar").addEventListener("click", limpiarMarcas);
+
+  v.querySelectorAll("[data-marca-digito]").forEach((b) =>
+    b.addEventListener("click", () => cambiarMarcaDigito(b.dataset.marcaDigito)));
+
+  v.querySelectorAll("[data-celda]").forEach((b) =>
+    b.addEventListener("click", () => seleccionarCelda(Number(b.dataset.celda))));
+
+  v.querySelectorAll(".fila[data-turno]").forEach((fila) => {
+    const turno = Number(fila.dataset.turno);
+    fila.querySelectorAll(".celda").forEach((celda, pos) =>
+      celda.addEventListener("click", () => cambiarMarca(turno, pos)));
+  });
+
+  v.querySelectorAll("[data-digito]").forEach((b) =>
+    b.addEventListener("click", () => escribirDigito(b.dataset.digito)));
+
+  const probarBtn = v.querySelector("#btn-probar");
+  if (probarBtn) probarBtn.addEventListener("click", probar);
+
+  const borrar = v.querySelector("#btn-borrar");
+  if (borrar) borrar.addEventListener("click", borrarDigito);
+
+  const rendirse = v.querySelector("#btn-rendirse");
+  if (rendirse) rendirse.addEventListener("click", () => { estado.dialogo = "rendirse"; pintar(); });
+
+  const otra = v.querySelector("#btn-otra-vez");
+  if (otra) otra.addEventListener("click", empezarPartida);
+
+  const verRanking = v.querySelector("#btn-ranking-final");
+  if (verRanking) verRanking.addEventListener("click", () => irA("ranking"));
+
+  // El historial sigue a la fila en juego.
+  const historial = v.querySelector(".historial");
+  if (historial && !terminada()) {
+    const activa = historial.children[intentosUsados()];
+    if (activa) activa.scrollIntoView({ block: "nearest" });
+  }
+
+  // La animación de entrada corre una sola vez.
+  turnoRecien = 0;
+}
+
+function panelFinal() {
+  const gano = estado.partida === "ganada";
+  const titulo = gano
+    ? "¡Ganaste!"
+    : estado.partida === "perdida"
+      ? "Se acabaron los intentos"
+      : "Te rendiste";
+  const detalle = gano
+    ? `${intentosUsados()} ${intentosUsados() === 1 ? "intento" : "intentos"} en ${formatearTiempo(estado.tiempoMs)}.`
+    : `El número era <span class="secreto">${estado.secretoRevelado}</span>`;
+  return `
+    <div class="panel-final gutter${gano ? " gano" : ""}">
+      <h2>${titulo}</h2>
+      <p>${detalle}</p>
+      ${gano ? '<p class="guardado">Guardado en el ranking.</p>' : ""}
+      <div class="par-botones">
+        <button class="boton-linea" id="btn-ranking-final">Ranking</button>
+        <button class="boton" id="btn-otra-vez">Otra vez</button>
+      </div>
+    </div>
+  `;
+}
+
+function pintarRanking() {
+  const puntajes = estado.puntajes;
+  const reciente = estado.puntajeReciente;
+
+  const cuerpo = puntajes.length === 0
+    ? `<div class="vacio gutter">Todavía no hay partidas ganadas.<br>Gana una y aparecerás aquí.</div>`
+    : `
+      <div class="tabla-cabecera gutter">
+        <span class="pos">#</span>
+        <span class="jug">Jugador</span>
+        <span class="int">Intentos</span>
+        <span class="tie">Tiempo</span>
+      </div>
+      <div class="lista-ranking gutter">
+        ${puntajes.map((p, i) => {
+          const pos = i + 1;
+          const esReciente = reciente &&
+            p.jugador === reciente.jugador &&
+            p.intentos === reciente.intentos &&
+            p.tiempoMs === reciente.tiempoMs &&
+            p.fechaMs === reciente.fechaMs;
+          const clase = esReciente ? "reciente" : pos <= 3 ? "podio" : "";
+          return `
+            <div class="puesto ${clase}">
+              <span class="pos"><span class="medalla">${pos}</span></span>
+              <span class="jug">${esc(p.jugador)}</span>
+              <span class="int">${p.intentos}</span>
+              <span class="tie">${formatearTiempo(p.tiempoMs)}</span>
+            </div>
+          `;
+        }).join("")}
+      </div>
+      <div class="pie-ranking gutter">
+        <button class="boton-linea" id="btn-borrar-ranking">Borrar ranking</button>
+      </div>
+    `;
+
+  vistas.ranking.innerHTML = `
+    <header class="barra gutter">
+      <div class="quien"><div class="nombre">Ranking</div></div>
+      <button class="salir" id="btn-volver">Volver</button>
+    </header>
+    ${cuerpo}
+  `;
+
+  vistas.ranking.querySelector("#btn-volver")
+    .addEventListener("click", () => irA(estado.intentos.length > 0 || terminada() ? "juego" : "inicio"));
+
+  const borrar = vistas.ranking.querySelector("#btn-borrar-ranking");
+  if (borrar) borrar.addEventListener("click", () => { estado.dialogo = "borrar"; pintar(); });
+}
+
+function pintarDialogo() {
+  if (!estado.dialogo) { capaDialogo.innerHTML = ""; return; }
+
+  const textos = {
+    rendirse: {
+      titulo: "¿Te quieres rendir?",
+      cuerpo: "Se revelará el número secreto y perderás esta partida.",
+      confirmar: "Sí, rendirme",
+    },
+    borrar: {
+      titulo: "¿Borrar el ranking?",
+      cuerpo: "Se pierden todos los puntajes guardados y no se pueden recuperar.",
+      confirmar: "Borrar",
+    },
+  }[estado.dialogo];
+
+  capaDialogo.innerHTML = `
+    <div class="velo" role="dialog" aria-modal="true" aria-labelledby="dlg-titulo">
+      <div class="dialogo">
+        <h2 id="dlg-titulo">${textos.titulo}</h2>
+        <p>${textos.cuerpo}</p>
+        <div class="opciones">
+          <button id="dlg-cancelar">Cancelar</button>
+          <button id="dlg-confirmar">${textos.confirmar}</button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  const cual = estado.dialogo;
+  capaDialogo.querySelector("#dlg-cancelar")
+    .addEventListener("click", () => { estado.dialogo = null; pintar(); });
+  capaDialogo.querySelector("#dlg-confirmar").addEventListener("click", () => {
+    estado.dialogo = null;
+    if (cual === "rendirse") confirmarRendirse();
+    else {
+      borrarPuntajes();
+      estado.puntajes = [];
+      estado.puntajeReciente = null;
+      pintar();
+    }
+  });
+  capaDialogo.querySelector("#dlg-confirmar").focus();
+}
+
+// ---------------------------------------------------------------------------
+// Teclado físico: el navegador lo tiene y el teléfono no, así que se suma
+// sin reemplazar al selector de abajo.
+// ---------------------------------------------------------------------------
+
+document.addEventListener("keydown", (e) => {
+  if (estado.dialogo) {
+    if (e.key === "Escape") { estado.dialogo = null; pintar(); }
+    return;
+  }
+  if (estado.pantalla !== "juego" || terminada()) return;
+  if (e.target instanceof HTMLInputElement) return;
+
+  if (/^\d$/.test(e.key)) { e.preventDefault(); escribirDigito(e.key); }
+  else if (e.key === "Backspace") { e.preventDefault(); borrarDigito(); }
+  else if (e.key === "Enter" && puedeProbar()) { e.preventDefault(); probar(); }
+  else if (e.key === "ArrowLeft" && estado.fila.seleccion !== null) {
+    e.preventDefault();
+    seleccionarCelda(Math.max(0, estado.fila.seleccion - 1));
+  } else if (e.key === "ArrowRight" && estado.fila.seleccion !== null) {
+    e.preventDefault();
+    seleccionarCelda(Math.min(LARGO_SECRETO - 1, estado.fila.seleccion + 1));
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Arranque.
+// ---------------------------------------------------------------------------
+
+estado.puntajes = leerPuntajes();
+estado.jugador = leerUltimoJugador();
+pintar();
+</script>
+</body>
+</html>
