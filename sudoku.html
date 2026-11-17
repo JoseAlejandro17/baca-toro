@@ -311,7 +311,7 @@
   <div id="capa-dialogo"></div>
 </div>
 
-<script src="duelo.js"></script>
+<script src="duelo.js?v=2"></script>
 <script>
 "use strict";
 
@@ -1264,9 +1264,9 @@ function codigoDeResultado() {
 }
 
 function pegarResultadoRival(texto) {
-  const d = deCodigo(texto);
-  if (!d || d.t !== "res" || !Array.isArray(d.r) || !d.r.length) {
-    return "No se entiende ese código. Pégalo completo.";
+  const d = extraerCodigo(texto, "res");
+  if (!d || !Array.isArray(d.r) || !d.r.length) {
+    return "Ahí no encuentro ningún resultado. Pega el mensaje que te mandó, tal cual.";
   }
   estado.duelo.rival = d.de || estado.duelo.rival;
   estado.duelo.tiempoRival = (Number(d.r[0][1]) || 0) * 100;
@@ -1377,13 +1377,13 @@ function pintarFinalDueloSudoku() {
 
     ${d.tiempoRival !== null ? comparacion : `
       <div class="caja-enlace"><code>${codigo}</code></div>
-      <a class="boton btn-wsp" href="${enlaceWhatsapp(`Lo saqué en ${formatearTiempo(d.tiempoMs)}. Mi resultado:\n${codigo}`)}" target="_blank" rel="noopener">Mandar mi tiempo</a>
+      <a class="boton btn-wsp" href="${enlaceWhatsapp(codigo)}" target="_blank" rel="noopener">Mandar mi tiempo</a>
       <button class="boton-linea" id="btn-copiar">Copiar mi tiempo</button>
       <p class="aviso-copia" id="aviso"></p>
 
       <div class="campo" style="margin-top:6px">
         <label for="codigo-rival">Pega acá el resultado de tu rival</label>
-        <input id="codigo-rival" type="text" placeholder="Pega el código" autocomplete="off">
+        <input id="codigo-rival" type="text" placeholder="Pega el mensaje de tu rival" autocomplete="off">
         <span class="ayuda" id="error-codigo"></span>
       </div>
       <button class="boton" id="btn-comparar">Comparar</button>

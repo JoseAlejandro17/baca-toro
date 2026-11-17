@@ -24,7 +24,7 @@
   <div id="capa-dialogo"></div>
 </div>
 
-<script src="duelo.js"></script>
+<script src="duelo.js?v=2"></script>
 <script>
 "use strict";
 
@@ -893,8 +893,10 @@ function codigoDeResultado() {
 
 /** Lee el código que mandó el rival y lo deja listo para comparar. */
 function pegarResultadoRival(texto) {
-  const d = deCodigo(texto);
-  if (!d || d.t !== "res" || !Array.isArray(d.r)) return "No se entiende ese código. Pégalo completo.";
+  const d = extraerCodigo(texto, "res");
+  if (!d || !Array.isArray(d.r)) {
+    return "Ahí no encuentro ningún resultado. Pega el mensaje que te mandó, tal cual.";
+  }
   if (d.r.length !== estado.duelo.resultados.length) {
     return `Ese código es de una partida a ${d.r.length}, y esta es a ${estado.duelo.resultados.length}.`;
   }
@@ -1132,13 +1134,13 @@ function pintarFinalDuelo() {
 
     ${d.resultadoRival ? comparacion : `
       <div class="caja-enlace"><code>${codigo}</code></div>
-      <a class="boton btn-wsp" href="${enlaceWhatsapp(`Terminé el duelo. Mi resultado:\n${codigo}`)}" target="_blank" rel="noopener">Mandar mi resultado</a>
+      <a class="boton btn-wsp" href="${enlaceWhatsapp(codigo)}" target="_blank" rel="noopener">Mandar mi resultado</a>
       <button class="boton-linea" id="btn-copiar">Copiar mi resultado</button>
       <p class="aviso-copia" id="aviso"></p>
 
       <div class="campo" style="margin-top:6px">
         <label for="codigo-rival">Pega acá el resultado de ${esc(d.rival)}</label>
-        <input id="codigo-rival" type="text" placeholder="Pega el código" autocomplete="off">
+        <input id="codigo-rival" type="text" placeholder="Pega el mensaje de tu rival" autocomplete="off">
         <span class="ayuda" id="error-codigo"></span>
       </div>
       <button class="boton" id="btn-comparar">Comparar</button>

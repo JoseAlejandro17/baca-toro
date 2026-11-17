@@ -22,7 +22,27 @@ function aCodigo(obj) {
   return btoa(binario).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
-/** Lo contrario. Devuelve null si el código viene cortado o cambiado. */
+/**
+ * Saca el código de un texto que puede venir con cualquier cosa alrededor.
+ *
+ * Al copiar un mensaje de WhatsApp se arrastra lo que venga antes y después
+ * —el saludo, la hora, el nombre de quien lo mandó—, así que en vez de exigir
+ * que peguen el código pelado se busca dentro: se prueban los trozos que
+ * tienen pinta de código, del más largo al más corto, y vale el primero que
+ * se deje leer.
+ *
+ * @return el objeto leído, o null si ahí no hay ningún código.
+ */
+function extraerCodigo(texto, tipoEsperado) {
+  const trozos = String(texto).match(/[A-Za-z0-9_-]{12,}/g) || [];
+  for (const trozo of trozos.sort((a, b) => b.length - a.length)) {
+    const datos = deCodigo(trozo);
+    if (datos && (!tipoEsperado || datos.t === tipoEsperado)) return datos;
+  }
+  return null;
+}
+
+/** Lo contrario de aCodigo. Devuelve null si viene cortado o cambiado. */
 function deCodigo(texto) {
   try {
     const limpio = String(texto).trim().replace(/-/g, "+").replace(/_/g, "/");
