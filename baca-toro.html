@@ -12,17 +12,19 @@
 <link rel="icon" href="icono-192.png">
 <link rel="apple-touch-icon" href="icono-192.png">
 
-<link rel="stylesheet" href="comun.css">
+<link rel="stylesheet" href="comun.css?v=3">
 </head>
 <body>
 
 <div id="app">
   <section class="vista portada gutter" id="vista-inicio"></section>
+  <section class="vista portada gutter" id="vista-duelo" hidden></section>
   <section class="vista" id="vista-juego" hidden></section>
   <section class="vista" id="vista-ranking" hidden></section>
   <div id="capa-dialogo"></div>
 </div>
 
+<script src="duelo.js"></script>
 <script>
 "use strict";
 
@@ -202,7 +204,31 @@ const estado = {
   puntajes: [],
   puntajeReciente: null,
   dialogo: null,
+  /** Duelo en curso contra un amigo, o null si se juega solo. */
+  duelo: null,
+  /** Lo que se está armando antes de mandarle el enlace al rival. */
+  armando: null,
 };
+
+const CLAVE_DUELO = "baca_duelo";
+const CANTIDADES = [1, 3, 5, 10];
+
+function guardarDuelo() {
+  try {
+    if (estado.duelo) localStorage.setItem(CLAVE_DUELO, JSON.stringify(estado.duelo));
+    else localStorage.removeItem(CLAVE_DUELO);
+  } catch (e) { /* sin almacenamiento, el duelo dura lo que dure la pestaña */ }
+}
+
+function leerDuelo() {
+  try {
+    const crudo = localStorage.getItem(CLAVE_DUELO);
+    const d = crudo ? JSON.parse(crudo) : null;
+    return d && Array.isArray(d.aResolver) ? d : null;
+  } catch (e) {
+    return null;
+  }
+}
 
 let cronometro = null;
 /** Turno que se acaba de jugar, para animarlo una sola vez al aparecer. */
@@ -224,8 +250,9 @@ const esc = (texto) =>
 // Acciones.
 // ---------------------------------------------------------------------------
 
-function empezarPartida() {
-  estado.secreto = generarSecreto();
+function empezarPartida(secretoFijo) {
+  // En un duelo el número no se sortea: lo puso el rival.
+  estado.secreto = secretoFijo || generarSecreto();
   estado.fila = filaVacia();
   estado.intentos = [];
   estado.error = null;
@@ -341,6 +368,10 @@ function confirmarRendirse() {
 function terminar() {
   detenerCronometro();
   estado.tiempoMs = Date.now() - estado.inicioMs;
+
+  // En un duelo no se guarda en el ranking de a uno: se anota la ronda.
+  if (estado.duelo) { cerrarRondaDeDuelo(); return; }
+
   if (estado.partida !== "ganada") return;
 
   const puntaje = {
@@ -367,6 +398,7 @@ function irA(pantalla) {
 
 const vistas = {
   inicio: document.getElementById("vista-inicio"),
+  duelo: document.getElementById("vista-duelo"),
   juego: document.getElementById("vista-juego"),
   ranking: document.getElementById("vista-ranking"),
 };
@@ -376,6 +408,7 @@ function pintar() {
   for (const [nombre, nodo] of Object.entries(vistas)) nodo.hidden = nombre !== estado.pantalla;
 
   if (estado.pantalla === "inicio") pintarInicio();
+  if (estado.pantalla === "duelo") pintarDuelo();
   if (estado.pantalla === "juego") pintarJuego();
   if (estado.pantalla === "ranking") pintarRanking();
 
@@ -439,7 +472,8 @@ function pintarInicio() {
       <span class="ayuda">Con este nombre entras al ranking.</span>
     </div>
 
-    <button class="boton" id="btn-jugar">Jugar</button>
+    <button class="boton" id="btn-jugar">Jugar solo</button>
+    <button class="boton-linea" id="btn-duelo">Duelo con un amigo</button>
     <button class="boton-linea" id="btn-ver-ranking">Ver ranking</button>
   `;
 
@@ -450,7 +484,8 @@ function pintarInicio() {
   nombre.addEventListener("keydown", (e) => {
     if (e.key === "Enter") { e.preventDefault(); empezarPartida(); }
   });
-  vistas.inicio.querySelector("#btn-jugar").addEventListener("click", empezarPartida);
+  vistas.inicio.querySelector("#btn-jugar").addEventListener("click", () => empezarPartida());
+  vistas.inicio.querySelector("#btn-duelo").addEventListener("click", () => abrirArmado(null));
   vistas.inicio.querySelector("#btn-ver-ranking").addEventListener("click", () => irA("ranking"));
 }
 
@@ -542,8 +577,12 @@ function pintarJuego() {
   vistas.juego.innerHTML = `
     <header class="barra gutter">
       <div class="quien">
-        <div class="nombre">${esc(estado.jugador.trim() || NOMBRE_POR_DEFECTO)}</div>
-        <div class="turno">Intento ${Math.min(intentosUsados() + 1, MAX_INTENTOS)} de ${MAX_INTENTOS}</div>
+        <div class="nombre">${estado.duelo
+          ? `Duelo con ${esc(estado.duelo.rival)}`
+          : esc(estado.jugador.trim() || NOMBRE_POR_DEFECTO)}</div>
+        <div class="turno">${estado.duelo
+          ? `Número ${estado.duelo.ronda + 1} de ${estado.duelo.aResolver.length} · intento ${Math.min(intentosUsados() + 1, MAX_INTENTOS)}`
+          : `Intento ${Math.min(intentosUsados() + 1, MAX_INTENTOS)} de ${MAX_INTENTOS}`}</div>
       </div>
       <span class="reloj" id="reloj">${formatearTiempo(estado.tiempoMs)}</span>
       <button class="salir" id="btn-salir">Salir</button>
@@ -574,7 +613,10 @@ function pintarJuego() {
   `;
 
   const v = vistas.juego;
-  v.querySelector("#btn-salir").addEventListener("click", () => irA("inicio"));
+  v.querySelector("#btn-salir").addEventListener("click", () => {
+    if (estado.duelo) { estado.dialogo = "dejarDuelo"; pintar(); }
+    else irA("inicio");
+  });
   v.querySelector("#btn-limpiar").addEventListener("click", limpiarMarcas);
 
   v.querySelectorAll("[data-marca-digito]").forEach((b) =>
@@ -602,7 +644,10 @@ function pintarJuego() {
   if (rendirse) rendirse.addEventListener("click", () => { estado.dialogo = "rendirse"; pintar(); });
 
   const otra = v.querySelector("#btn-otra-vez");
-  if (otra) otra.addEventListener("click", empezarPartida);
+  if (otra) otra.addEventListener("click", () => empezarPartida());
+
+  const siguiente = v.querySelector("#btn-siguiente");
+  if (siguiente) siguiente.addEventListener("click", siguienteRonda);
 
   const verRanking = v.querySelector("#btn-ranking-final");
   if (verRanking) verRanking.addEventListener("click", () => irA("ranking"));
@@ -628,6 +673,23 @@ function panelFinal() {
   const detalle = gano
     ? `${intentosUsados()} ${intentosUsados() === 1 ? "intento" : "intentos"} en ${formatearTiempo(estado.tiempoMs)}.`
     : `El número era <span class="secreto">${estado.secretoRevelado}</span>`;
+  // En un duelo el panel no ofrece ranking ni revancha: encadena las rondas.
+  if (estado.duelo) {
+    const d = estado.duelo;
+    const quedan = d.aResolver.length - d.ronda - 1;
+    return `
+      <div class="panel-final gutter${gano ? " gano" : ""}">
+        <h2>${titulo}</h2>
+        <p>${detalle}</p>
+        <p class="guardado">Número ${d.ronda + 1} de ${d.aResolver.length}${
+          quedan > 0 ? ` · quedan ${quedan}` : " · era el último"}</p>
+        <div class="par-botones">
+          <button class="boton" id="btn-siguiente">${quedan > 0 ? "Siguiente número" : "Ver el resultado"}</button>
+        </div>
+      </div>
+    `;
+  }
+
   return `
     <div class="panel-final gutter${gano ? " gano" : ""}">
       <h2>${titulo}</h2>
@@ -707,6 +769,11 @@ function pintarDialogo() {
       cuerpo: "Se pierden todos los puntajes guardados y no se pueden recuperar.",
       confirmar: "Borrar",
     },
+    dejarDuelo: {
+      titulo: "¿Dejar el duelo?",
+      cuerpo: "Se pierden los números que llevas resueltos. El enlace de tu rival sigue sirviendo si quieres retomarlo.",
+      confirmar: "Sí, dejarlo",
+    },
   }[estado.dialogo];
 
   capaDialogo.innerHTML = `
@@ -728,6 +795,7 @@ function pintarDialogo() {
   capaDialogo.querySelector("#dlg-confirmar").addEventListener("click", () => {
     estado.dialogo = null;
     if (cual === "rendirse") confirmarRendirse();
+    else if (cual === "dejarDuelo") salirDelDuelo();
     else {
       borrarPuntajes();
       estado.puntajes = [];
@@ -736,6 +804,365 @@ function pintarDialogo() {
     }
   });
   capaDialogo.querySelector("#dlg-confirmar").focus();
+}
+
+// ---------------------------------------------------------------------------
+// Duelo contra un amigo.
+//
+// Nadie está conectado con nadie: el que reta manda un enlace con los números
+// que el otro tendrá que adivinar, el retado contesta con los suyos, y de ahí
+// cada uno juega cuando quiera. Al final se cambian un código con los
+// resultados y la pantalla dice quién ganó.
+// ---------------------------------------------------------------------------
+
+function abrirArmado(reto) {
+  estado.armando = {
+    fase: reto ? "escribir" : "elegir",
+    cantidad: reto ? reto.n.length : 3,
+    numeros: [],
+    reto: reto || null,
+    enlace: "",
+  };
+  estado.pantalla = "duelo";
+  pintar();
+}
+
+function elegirCantidad(n) {
+  estado.armando.cantidad = n;
+  pintar();
+}
+
+/** Cuatro dígitos distintos, igual que el número que sortea el juego. */
+function numeroValido(texto) {
+  return /^\d{4}$/.test(texto) && new Set(texto).size === 4;
+}
+
+function pasarAEscribir() {
+  estado.armando.fase = "escribir";
+  pintar();
+}
+
+/** Arma el enlace con los números que el rival tendrá que adivinar. */
+function cerrarArmado(numeros) {
+  const a = estado.armando;
+  a.numeros = numeros;
+  a.enlace = enlaceCon("baca-toro.html", {
+    t: a.reto ? "resp" : "reto",
+    de: estado.jugador.trim() || NOMBRE_POR_DEFECTO,
+    n: numeros,
+  });
+  a.fase = "enviar";
+  pintar();
+}
+
+/** Empieza a resolver los números que puso el rival. */
+function comenzarDuelo(rival, aResolver) {
+  estado.duelo = { rival, aResolver, ronda: 0, resultados: [], resultadoRival: null };
+  estado.armando = null;
+  guardarDuelo();
+  empezarPartida(aResolver[0]);
+}
+
+/** Anota cómo fue la ronda y pasa a la siguiente, o cierra el duelo. */
+function cerrarRondaDeDuelo() {
+  const d = estado.duelo;
+  d.resultados.push({
+    // Perder o rendirse cuesta el máximo de intentos: si no, convendría
+    // rendirse apenas el número se pone difícil.
+    intentos: estado.partida === "ganada" ? intentosUsados() : MAX_INTENTOS,
+    tiempoMs: estado.tiempoMs,
+  });
+  guardarDuelo();
+}
+
+function siguienteRonda() {
+  const d = estado.duelo;
+  d.ronda++;
+  guardarDuelo();
+  if (d.ronda < d.aResolver.length) empezarPartida(d.aResolver[d.ronda]);
+  else { estado.pantalla = "duelo"; estado.armando = { fase: "final" }; pintar(); }
+}
+
+function codigoDeResultado() {
+  return aCodigo({
+    t: "res",
+    de: estado.jugador.trim() || NOMBRE_POR_DEFECTO,
+    r: estado.duelo.resultados.map((x) => [x.intentos, Math.round(x.tiempoMs / 100)]),
+  });
+}
+
+/** Lee el código que mandó el rival y lo deja listo para comparar. */
+function pegarResultadoRival(texto) {
+  const d = deCodigo(texto);
+  if (!d || d.t !== "res" || !Array.isArray(d.r)) return "No se entiende ese código. Pégalo completo.";
+  if (d.r.length !== estado.duelo.resultados.length) {
+    return `Ese código es de una partida a ${d.r.length}, y esta es a ${estado.duelo.resultados.length}.`;
+  }
+  estado.duelo.rival = d.de || estado.duelo.rival;
+  estado.duelo.resultadoRival = d.r.map(([intentos, decimas]) => ({
+    intentos: Number(intentos) || 0,
+    tiempoMs: (Number(decimas) || 0) * 100,
+  }));
+  guardarDuelo();
+  pintar();
+  return null;
+}
+
+function salirDelDuelo() {
+  estado.duelo = null;
+  estado.armando = null;
+  estado.dialogo = null;
+  guardarDuelo();
+  detenerCronometro();
+  estado.pantalla = "inicio";
+  pintar();
+}
+
+function pintarDuelo() {
+  const a = estado.armando || {};
+  if (a.fase === "elegir") return pintarElegirCantidad();
+  if (a.fase === "escribir") return pintarEscribirNumeros();
+  if (a.fase === "enviar") return pintarEnviarEnlace();
+  if (a.fase === "final") return pintarFinalDuelo();
+}
+
+function pintarElegirCantidad() {
+  const a = estado.armando;
+  vistas.duelo.innerHTML = `
+    <a class="volver" href="#" id="btn-atras">← Volver</a>
+    <div class="marca">
+      <h1 class="titulo">Duelo</h1>
+      <p class="bajada">Cada uno pone los números que el otro tiene que adivinar. Después juegan por separado y se comparan los resultados.</p>
+    </div>
+
+    <div class="opciones">
+      <p class="rotulo">¿Cuántos números?</p>
+      <div class="botonera fila4">
+        ${CANTIDADES.map((n) => `
+          <button class="opcion" data-cantidad="${n}" aria-pressed="${n === a.cantidad}">
+            <span class="fuerte">${n}</span>
+            <span class="flojo">${n === 1 ? "una vuelta" : "vueltas"}</span>
+          </button>
+        `).join("")}
+      </div>
+    </div>
+
+    <div class="campo">
+      <label for="nombre-duelo">¿Cómo te llamas?</label>
+      <input id="nombre-duelo" type="text" maxlength="${MAX_LARGO_NOMBRE}"
+             placeholder="${NOMBRE_POR_DEFECTO}" value="${esc(estado.jugador)}" autocomplete="nickname">
+      <span class="ayuda">Así te verá tu rival.</span>
+    </div>
+
+    <button class="boton" id="btn-seguir">Escribir mis números</button>
+  `;
+
+  vistas.duelo.querySelectorAll("[data-cantidad]").forEach((b) =>
+    b.addEventListener("click", () => elegirCantidad(Number(b.dataset.cantidad))));
+  vistas.duelo.querySelector("#nombre-duelo").addEventListener("input", (e) => {
+    estado.jugador = e.target.value.slice(0, MAX_LARGO_NOMBRE);
+  });
+  vistas.duelo.querySelector("#btn-seguir").addEventListener("click", pasarAEscribir);
+  vistas.duelo.querySelector("#btn-atras").addEventListener("click", (e) => {
+    e.preventDefault(); estado.armando = null; irA("inicio");
+  });
+}
+
+function pintarEscribirNumeros() {
+  const a = estado.armando;
+  const quien = a.reto ? esc(a.reto.de) : "tu rival";
+  const campos = Array.from({ length: a.cantidad }, (_, i) => `
+    <div class="campo-numero">
+      <span class="indice">${i + 1}</span>
+      <input class="secreto" data-indice="${i}" type="text" inputmode="numeric"
+             maxlength="4" placeholder="0000" autocomplete="off" value="${esc(a.numeros[i] || "")}">
+      <span class="visto" data-visto="${i}"></span>
+    </div>
+  `).join("");
+
+  vistas.duelo.innerHTML = `
+    <a class="volver" href="#" id="btn-atras">← Volver</a>
+    <div class="marca">
+      <h1 class="titulo">Tus números</h1>
+      <p class="bajada">${a.reto
+        ? `<strong>${quien}</strong> te retó a ${a.cantidad} ${a.cantidad === 1 ? "número" : "números"}. Escribe los tuyos, que son los que tendrá que adivinar.`
+        : `Escribe los ${a.cantidad} que tendrá que adivinar ${quien}.`}</p>
+    </div>
+
+    <div class="numeros-secretos">${campos}</div>
+    <p class="nota" style="text-align:left">Cuatro dígitos <strong>distintos</strong> cada uno. Puede empezar con 0.</p>
+
+    <button class="boton-linea" id="btn-azar">Ponerlos al azar</button>
+    <button class="boton" id="btn-listo" disabled>Listo</button>
+  `;
+
+  const inputs = [...vistas.duelo.querySelectorAll(".secreto")];
+  const listo = vistas.duelo.querySelector("#btn-listo");
+
+  function revisar() {
+    const valores = inputs.map((x) => x.value.trim());
+    valores.forEach((v, i) => {
+      const marca = vistas.duelo.querySelector(`[data-visto="${i}"]`);
+      marca.textContent = v === "" ? "" : numeroValido(v) ? "✓" : "✗";
+      marca.className = `visto ${v === "" ? "" : numeroValido(v) ? "bien" : "mal"}`;
+    });
+    a.numeros = valores;
+    listo.disabled = !valores.every(numeroValido);
+  }
+
+  inputs.forEach((x) => {
+    x.addEventListener("input", () => {
+      x.value = x.value.replace(/\D/g, "").slice(0, 4);
+      revisar();
+    });
+  });
+  revisar();
+
+  vistas.duelo.querySelector("#btn-azar").addEventListener("click", () => {
+    inputs.forEach((x) => { x.value = generarSecreto(); });
+    revisar();
+  });
+  listo.addEventListener("click", () => cerrarArmado(inputs.map((x) => x.value.trim())));
+  vistas.duelo.querySelector("#btn-atras").addEventListener("click", (e) => {
+    e.preventDefault();
+    if (a.reto) { estado.armando = null; irA("inicio"); }
+    else { a.fase = "elegir"; pintar(); }
+  });
+}
+
+function pintarEnviarEnlace() {
+  const a = estado.armando;
+  const esRespuesta = Boolean(a.reto);
+  const mensaje = `Te reto en Baca Toro, a ${a.cantidad} ${a.cantidad === 1 ? "número" : "números"}. Abre esto y escribe los tuyos:\n${a.enlace}`;
+  const mensajeResp = `Listo, acá van mis números para ti. Ábrelo y juega cuando quieras:\n${a.enlace}`;
+  const texto = esRespuesta ? mensajeResp : mensaje;
+
+  vistas.duelo.innerHTML = `
+    <div class="marca">
+      <h1 class="titulo">${esRespuesta ? "Mándaselo de vuelta" : "Mándaselo a tu rival"}</h1>
+      <p class="bajada">${esRespuesta
+        ? `Este enlace lleva tus números para <strong>${esc(a.reto.de)}</strong>. Mándaselo y empieza a jugar: no tienes que esperarlo.`
+        : "Este enlace lleva tus números adentro. Cuando te conteste con el suyo, lo abres y empiezas."}</p>
+    </div>
+
+    <div class="caja-enlace"><code>${esc(a.enlace)}</code></div>
+
+    <a class="boton btn-wsp" id="btn-wsp" href="${enlaceWhatsapp(texto)}" target="_blank" rel="noopener">Mandar por WhatsApp</a>
+    <button class="boton-linea" id="btn-copiar">Copiar el enlace</button>
+    <p class="aviso-copia" id="aviso"></p>
+
+    ${esRespuesta
+      ? `<button class="boton" id="btn-jugar-ya">Empezar a jugar</button>`
+      : `<p class="nota" style="text-align:center">Cuando te llegue su enlace, ábrelo y la partida empieza sola.</p>
+         <button class="boton-linea" id="btn-atras">Volver al inicio</button>`}
+  `;
+
+  vistas.duelo.querySelector("#btn-copiar").addEventListener("click", async () => {
+    const como = await compartir(texto, "Duelo en Baca Toro");
+    const aviso = vistas.duelo.querySelector("#aviso");
+    aviso.textContent = como === "copiado" ? "Copiado. Pégalo donde quieras."
+      : como === "compartido" ? "Listo, se mandó."
+      : como === "cancelado" ? ""
+      : "No se pudo copiar. Selecciona el enlace de arriba a mano.";
+  });
+
+  const jugarYa = vistas.duelo.querySelector("#btn-jugar-ya");
+  if (jugarYa) jugarYa.addEventListener("click", () => comenzarDuelo(a.reto.de, a.reto.n));
+
+  const atras = vistas.duelo.querySelector("#btn-atras");
+  if (atras) atras.addEventListener("click", () => { estado.armando = null; irA("inicio"); });
+}
+
+function pintarFinalDuelo() {
+  const d = estado.duelo;
+  const codigo = codigoDeResultado();
+  const mios = d.resultados;
+  const prom = {
+    intentos: promedio(mios.map((r) => r.intentos)),
+    tiempoMs: promedio(mios.map((r) => r.tiempoMs)),
+  };
+
+  const filas = mios.map((r, i) => `
+    <div class="puesto">
+      <span class="pos"><span class="medalla">${i + 1}</span></span>
+      <span class="jug">${d.aResolver[i]}</span>
+      <span class="int">${r.intentos}</span>
+      <span class="tie">${formatearTiempo(r.tiempoMs)}</span>
+    </div>
+  `).join("");
+
+  let comparacion = "";
+  if (d.resultadoRival) {
+    const { ganador, yo, rival } = compararDuelo(mios, d.resultadoRival);
+    const nombreYo = esc(estado.jugador.trim() || NOMBRE_POR_DEFECTO);
+    comparacion = `
+      <div class="panel-final ${ganador === "yo" ? "gano" : ""}" style="margin-top:14px">
+        <h2>${ganador === "yo" ? "¡Ganaste!" : ganador === "rival" ? `Ganó ${esc(d.rival)}` : "Empate"}</h2>
+        <div class="marcador-duelo">
+          <div class="lado ${ganador === "yo" ? "vence" : ""}">
+            <span class="quien-duelo">${nombreYo}</span>
+            <span class="cifra-duelo">${formatearPromedio(yo.intentos)}</span>
+            <span class="rotulo-duelo">intentos</span>
+            <span class="tiempo-duelo">${formatearTiempo(yo.tiempoMs)}</span>
+          </div>
+          <span class="versus">vs</span>
+          <div class="lado ${ganador === "rival" ? "vence" : ""}">
+            <span class="quien-duelo">${esc(d.rival)}</span>
+            <span class="cifra-duelo">${formatearPromedio(rival.intentos)}</span>
+            <span class="rotulo-duelo">intentos</span>
+            <span class="tiempo-duelo">${formatearTiempo(rival.tiempoMs)}</span>
+          </div>
+        </div>
+        <p class="guardado">Promedios de ${mios.length} ${mios.length === 1 ? "número" : "números"}. A igual cantidad de intentos, gana el menor tiempo.</p>
+      </div>
+    `;
+  }
+
+  vistas.duelo.innerHTML = `
+    <div class="marca">
+      <h1 class="titulo">Terminaste</h1>
+      <p class="bajada">Tu promedio: <strong>${formatearPromedio(prom.intentos)}</strong> ${prom.intentos === 1 ? "intento" : "intentos"} y <strong>${formatearTiempo(prom.tiempoMs)}</strong> por número.</p>
+    </div>
+
+    <div class="tabla-cabecera" style="padding-inline:0">
+      <span class="pos">#</span><span class="jug">Número</span>
+      <span class="int">Intentos</span><span class="tie">Tiempo</span>
+    </div>
+    <div class="lista-ranking" style="flex:none">${filas}</div>
+
+    ${d.resultadoRival ? comparacion : `
+      <div class="caja-enlace"><code>${codigo}</code></div>
+      <a class="boton btn-wsp" href="${enlaceWhatsapp(`Terminé el duelo. Mi resultado:\n${codigo}`)}" target="_blank" rel="noopener">Mandar mi resultado</a>
+      <button class="boton-linea" id="btn-copiar">Copiar mi resultado</button>
+      <p class="aviso-copia" id="aviso"></p>
+
+      <div class="campo" style="margin-top:6px">
+        <label for="codigo-rival">Pega acá el resultado de ${esc(d.rival)}</label>
+        <input id="codigo-rival" type="text" placeholder="Pega el código" autocomplete="off">
+        <span class="ayuda" id="error-codigo"></span>
+      </div>
+      <button class="boton" id="btn-comparar">Comparar</button>
+    `}
+
+    <button class="boton-linea" id="btn-salir-duelo" style="margin-top:6px">Salir del duelo</button>
+  `;
+
+  const copiar = vistas.duelo.querySelector("#btn-copiar");
+  if (copiar) copiar.addEventListener("click", async () => {
+    const como = await compartir(codigo, "Mi resultado");
+    const aviso = vistas.duelo.querySelector("#aviso");
+    aviso.textContent = como === "copiado" ? "Copiado." : como === "compartido" ? "Listo, se mandó."
+      : como === "cancelado" ? "" : "No se pudo copiar. Selecciónalo a mano.";
+  });
+
+  const comparar = vistas.duelo.querySelector("#btn-comparar");
+  if (comparar) comparar.addEventListener("click", () => {
+    const campo = vistas.duelo.querySelector("#codigo-rival");
+    const error = pegarResultadoRival(campo.value);
+    if (error) vistas.duelo.querySelector("#error-codigo").textContent = error;
+  });
+
+  vistas.duelo.querySelector("#btn-salir-duelo").addEventListener("click", salirDelDuelo);
 }
 
 // ---------------------------------------------------------------------------
@@ -769,7 +1196,41 @@ document.addEventListener("keydown", (e) => {
 
 estado.puntajes = leerPuntajes();
 estado.jugador = leerUltimoJugador();
-pintar();
+
+(function arrancar() {
+  const entrante = datosDelEnlace();
+
+  // Un enlace de duelo manda sobre cualquier cosa que hubiera guardada.
+  if (entrante && Array.isArray(entrante.n) && entrante.n.every(numeroValido)) {
+    limpiarEnlace();
+    if (entrante.t === "reto") {
+      // Te retaron: primero pones los tuyos, después juegas los suyos.
+      abrirArmado(entrante);
+      return;
+    }
+    if (entrante.t === "resp") {
+      // Te contestaron: a jugar los números que mandó.
+      comenzarDuelo(entrante.de || "Tu rival", entrante.n);
+      return;
+    }
+  }
+
+  // Un duelo a medias sobrevive a que se cierre la pestaña.
+  const guardado = leerDuelo();
+  if (guardado) {
+    estado.duelo = guardado;
+    if (guardado.resultados.length >= guardado.aResolver.length) {
+      estado.armando = { fase: "final" };
+      estado.pantalla = "duelo";
+      pintar();
+    } else {
+      empezarPartida(guardado.aResolver[guardado.ronda]);
+    }
+    return;
+  }
+
+  pintar();
+})();
 </script>
 </body>
 </html>

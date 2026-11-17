@@ -2,8 +2,8 @@
 
 Tres juegos de lápiz y papel para el navegador. Al entrar se elige cuál jugar.
 
-No hay compilación ni dependencias: son cuatro páginas HTML, una hoja de estilos
-y dos imágenes.
+No hay compilación ni dependencias: son cuatro páginas HTML, una hoja de estilos,
+un archivo de apoyo y dos imágenes.
 
 | Archivo | Qué es |
 | --- | --- |
@@ -12,6 +12,7 @@ y dos imágenes.
 | `sudoku.html` | Sudoku. |
 | `tango.html` | Tango. |
 | `comun.css` | Paleta, marco, barra, botones, diálogos y ranking, compartidos. |
+| `duelo.js` | Armado y lectura de los enlaces de duelo, compartido. |
 | `fondo.jpg` | La lámina de la vaca y el toro, de telón de fondo. |
 | `icono-192.png` | Ícono de la portada, favicon y pantalla de inicio. |
 
@@ -106,6 +107,50 @@ vacían casillas mientras siga habiendo **una sola respuesta**.
 Como las reglas de fila y columna son fuertes, el tablero queda con muy pocas
 casillas dadas: entre seis y doce según el nivel. Se arma en unos pocos
 milisegundos.
+
+---
+
+## Duelos
+
+Baca Toro y Sudoku se pueden jugar contra un amigo que esté donde sea. **No
+hay servidor**: lo que viaja entre los dos son enlaces que llevan la partida
+adentro, y que se mandan por WhatsApp. Cada uno juega cuando quiere, en
+paralelo, sin esperar al otro.
+
+### En Baca Toro
+
+La partida es a 1, 3, 5 o 10 números, y **cada uno escribe los que el otro
+tendrá que adivinar**.
+
+1. Quien reta escribe sus números y manda el enlace.
+2. El otro lo abre, escribe los suyos, manda el enlace de vuelta y ya puede
+   empezar a jugar.
+3. Quien retó abre ese enlace y empieza también.
+4. Al terminar, cada uno manda un código con su resultado y la pantalla
+   muestra quién ganó.
+
+Gana **el menor promedio de intentos** y, a igual cantidad, **el menor promedio
+de tiempo**: el mismo criterio con que se ordena el ranking de un jugador solo.
+Perder un número o rendirse cuesta el máximo de intentos, para que rendirse no
+sea una salida barata.
+
+### En Sudoku
+
+Los dos resuelven **el mismo tablero** y gana el menor tiempo. **No hay
+pistas**: con pistas no habría nada que comparar.
+
+El enlace lleva sólo el tablero de partida, no la solución: como el tablero
+tiene una sola respuesta, cada lado la calcula resolviéndolo. Al recibir un
+enlace se comprueba que sea un sudoku de verdad y con solución única; si viene
+cambiado o incompleto, se avisa en vez de arrancar una partida imposible.
+
+### Lo que esto no es
+
+No es tiempo real: no se ve al rival avanzar. Y como la partida viaja en el
+enlace, alguien que sepa leerlo puede ver lo que trae. Entre amigos da lo
+mismo; contra un tramposo decidido, no.
+
+Un duelo a medias sobrevive a que se cierre la pestaña.
 
 ---
 

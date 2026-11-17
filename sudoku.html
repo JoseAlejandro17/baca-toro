@@ -11,7 +11,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=IBM+Plex+Mono:wght@500;600;700&display=swap">
 <link rel="icon" href="icono-192.png">
 <link rel="apple-touch-icon" href="icono-192.png">
-<link rel="stylesheet" href="comun.css">
+<link rel="stylesheet" href="comun.css?v=3">
 
 <style>
 /* La cuadrícula manda: ocupa el ancho disponible y el resto se acomoda
@@ -302,11 +302,13 @@
 
 <div id="app">
   <section class="vista portada gutter" id="vista-config"></section>
+  <section class="vista portada gutter" id="vista-duelo" hidden></section>
   <section class="vista" id="vista-juego" hidden></section>
   <section class="vista" id="vista-ranking" hidden></section>
   <div id="capa-dialogo"></div>
 </div>
 
+<script src="duelo.js"></script>
 <script>
 "use strict";
 
@@ -428,6 +430,39 @@ function contarSoluciones(tab, n, tope = 2) {
 
   buscar();
   return encontradas;
+}
+
+/**
+ * Resuelve un tablero y devuelve la cuadrícula completa, o null si no tiene
+ * salida. Sirve para recuperar la solución de un tablero que llegó por un
+ * enlace, en vez de hacerla viajar al lado de las casillas.
+ */
+function resolverEntero(tab, n) {
+  const tabla = tablaCompaneras(n);
+  const copia = tab.slice();
+
+  function buscar() {
+    let mejor = -1, mejores = null;
+    for (let i = 0; i < copia.length; i++) {
+      if (copia[i] !== 0) continue;
+      const posibles = [];
+      for (let v = 1; v <= n; v++) if (cabe(copia, i, v, n, tabla)) posibles.push(v);
+      if (posibles.length === 0) return false;
+      if (mejores === null || posibles.length < mejores.length) {
+        mejor = i; mejores = posibles;
+        if (posibles.length === 1) break;
+      }
+    }
+    if (mejor === -1) return true;
+    for (const v of mejores) {
+      copia[mejor] = v;
+      if (buscar()) return true;
+      copia[mejor] = 0;
+    }
+    return false;
+  }
+
+  return buscar() ? copia : null;
 }
 
 /** Rellena un tablero entero válido, al azar. */
@@ -591,6 +626,9 @@ const estado = {
   puntajes: [],
   puntajeReciente: null,
   dialogo: null,
+  /** Duelo contra un amigo sobre el mismo tablero, o null si se juega solo. */
+  duelo: null,
+  armando: null,
 };
 
 let cronometro = null;
@@ -634,7 +672,7 @@ const esc = (texto) =>
 function elegirTamano(n) { estado.tam = n; pintar(); }
 function elegirNivel(nivel) { estado.nivel = nivel; pintar(); }
 
-function empezarPartida() {
+function empezarPartida(tableroFijo) {
   // Armar un 9×9 de experto toma un momento: se muestra el aviso y se genera
   // en el siguiente cuadro, para que la pantalla alcance a dibujarse.
   estado.pantalla = "juego";
@@ -643,7 +681,11 @@ function empezarPartida() {
 
   setTimeout(() => {
     const n = estado.tam;
-    const { solucion, inicial } = generarPartida(n, estado.nivel);
+    // En un duelo el tablero no se sortea: es el mismo que recibió el rival,
+    // y la solución se saca resolviéndolo, que para eso es única.
+    const { solucion, inicial } = tableroFijo
+      ? { inicial: tableroFijo, solucion: resolverEntero(tableroFijo, n) }
+      : generarPartida(n, estado.nivel);
     estado.solucion = solucion;
     estado.inicial = inicial;
     estado.tablero = inicial.slice();
@@ -727,7 +769,8 @@ function alternarNotas() {
 
 /** Revela la casilla elegida, o la primera vacía si no hay ninguna elegida. */
 function usarPista() {
-  if (estado.ganada || pistasRestantes() <= 0) return;
+  // En un duelo no hay pistas: con pistas no habría nada que comparar.
+  if (estado.duelo || estado.ganada || pistasRestantes() <= 0) return;
   let i = estado.seleccion;
   if (i === null || estado.tablero[i] === estado.solucion[i]) {
     i = estado.tablero.findIndex((v, k) => v !== estado.solucion[k]);
@@ -751,6 +794,8 @@ function revisarSiGano() {
   estado.ganada = true;
   detenerCronometro();
   estado.tiempoMs = Date.now() - estado.inicioMs;
+
+  if (estado.duelo) { cerrarDueloSudoku(); return; }
 
   const puntaje = {
     jugador: estado.jugador.trim() || NOMBRE_POR_DEFECTO,
@@ -784,6 +829,7 @@ function abandonar() {
 
 const vistas = {
   config: document.getElementById("vista-config"),
+  duelo: document.getElementById("vista-duelo"),
   juego: document.getElementById("vista-juego"),
   ranking: document.getElementById("vista-ranking"),
 };
@@ -792,6 +838,7 @@ const capaDialogo = document.getElementById("capa-dialogo");
 function pintar() {
   for (const [nombre, nodo] of Object.entries(vistas)) nodo.hidden = nombre !== estado.pantalla;
   if (estado.pantalla === "config") pintarConfig();
+  if (estado.pantalla === "duelo") pintarDuelo();
   if (estado.pantalla === "juego") pintarJuego();
   if (estado.pantalla === "ranking") pintarRanking();
   pintarDialogo();
@@ -814,6 +861,8 @@ function pintarConfig() {
 
   vistas.config.innerHTML = `
     <a class="volver" href="index.html">← Juegos</a>
+
+    ${alertaEnlaceMalo ? `<p class="aviso-enlace">Ese enlace de duelo no servía: el tablero venía incompleto o cambiado. Pídele a tu rival que te mande otro.</p>` : ""}
 
     <div class="marca">
       <h1 class="titulo">Sudoku</h1>
@@ -847,7 +896,8 @@ function pintarConfig() {
       <span class="ayuda">Con este nombre entras al ranking.</span>
     </div>
 
-    <button class="boton" id="btn-jugar">Jugar</button>
+    <button class="boton" id="btn-jugar">Jugar solo</button>
+    <button class="boton-linea" id="btn-duelo">Duelo con un amigo</button>
     <button class="boton-linea" id="btn-ver-ranking">Ver ranking</button>
   `;
 
@@ -864,7 +914,8 @@ function pintarConfig() {
     if (e.key === "Enter") { e.preventDefault(); empezarPartida(); }
   });
 
-  vistas.config.querySelector("#btn-jugar").addEventListener("click", empezarPartida);
+  vistas.config.querySelector("#btn-jugar").addEventListener("click", () => empezarPartida());
+  vistas.config.querySelector("#btn-duelo").addEventListener("click", armarDueloSudoku);
   vistas.config.querySelector("#btn-ver-ranking").addEventListener("click", () => irA("ranking"));
 }
 
@@ -872,8 +923,12 @@ function barraJuego() {
   return `
     <header class="barra gutter">
       <div class="quien">
-        <div class="nombre">${TAMANOS[estado.tam].nombre} · ${NIVELES[estado.nivel].nombre}</div>
-        <div class="turno">${esc(estado.jugador.trim() || NOMBRE_POR_DEFECTO)}</div>
+        <div class="nombre">${estado.duelo
+          ? `Duelo con ${esc(estado.duelo.rival)}`
+          : `${TAMANOS[estado.tam].nombre} · ${NIVELES[estado.nivel].nombre}`}</div>
+        <div class="turno">${estado.duelo
+          ? `${TAMANOS[estado.tam].nombre} ${NIVELES[estado.nivel].nombre.toLowerCase()} · sin pistas`
+          : esc(estado.jugador.trim() || NOMBRE_POR_DEFECTO)}</div>
       </div>
       <span class="reloj" id="reloj">${formatearTiempo(estado.tiempoMs)}</span>
       <button class="salir" id="btn-salir">Salir</button>
@@ -943,7 +998,15 @@ function pintarJuego() {
       listo ? "" : `<span class="restan">${faltan[v]}</span>`}</button>`;
   }).join("");
 
-  const abajo = estado.ganada ? `
+  const abajo = estado.ganada && estado.duelo ? `
+    <div class="panel-final gano gutter">
+      <h2>¡Resuelto!</h2>
+      <p>Lo sacaste en ${formatearTiempo(estado.tiempoMs)}.</p>
+      <div class="par-botones">
+        <button class="boton" id="btn-ver-duelo">Ver el resultado</button>
+      </div>
+    </div>
+  ` : estado.ganada ? `
     <div class="panel-final gano gutter">
       <h2>¡Resuelto!</h2>
       <p>${TAMANOS[n].nombre} ${NIVELES[estado.nivel].nombre.toLowerCase()} en ${formatearTiempo(estado.tiempoMs)}.</p>
@@ -963,7 +1026,8 @@ function pintarJuego() {
         <button class="accion" id="btn-deshacer"${estado.historial.length === 0 ? " disabled" : ""}>Atrás${
           estado.historial.length ? ` <span class="cuenta">${estado.historial.length}</span>` : ""}</button>
         <button class="accion" id="btn-borrar">Borrar</button>
-        <button class="accion" id="btn-pista"${pistasRestantes() <= 0 ? " disabled" : ""}>Pista ${pistasRestantes()}</button>
+        <button class="accion" id="btn-pista"${estado.duelo || pistasRestantes() <= 0 ? " disabled" : ""}>${
+          estado.duelo ? "Sin pistas" : `Pista ${pistasRestantes()}`}</button>
       </div>
     </div>
   `;
@@ -985,7 +1049,9 @@ function pintarJuego() {
 
   const v = vistas.juego;
   v.querySelector("#btn-salir").addEventListener("click", () => {
-    if (estado.ganada) abandonar();
+    if (estado.duelo && !estado.ganada) { estado.dialogo = "dejarDuelo"; pintar(); }
+    else if (estado.duelo) salirDelDuelo();
+    else if (estado.ganada) abandonar();
     else { estado.dialogo = "salir"; pintar(); }
   });
 
@@ -1007,6 +1073,13 @@ function pintarJuego() {
   if (bOtra) bOtra.addEventListener("click", empezarPartida);
   const bRanking = v.querySelector("#btn-ranking-final");
   if (bRanking) bRanking.addEventListener("click", () => irA("ranking"));
+
+  const bVerDuelo = v.querySelector("#btn-ver-duelo");
+  if (bVerDuelo) bVerDuelo.addEventListener("click", () => {
+    estado.armando = { fase: "final" };
+    estado.pantalla = "duelo";
+    pintar();
+  });
 }
 
 function pintarRanking() {
@@ -1073,6 +1146,11 @@ function pintarDialogo() {
       cuerpo: "Se pierde el tablero y el tiempo que llevas.",
       confirmar: "Sí, salir",
     },
+    dejarDuelo: {
+      titulo: "¿Dejar el duelo?",
+      cuerpo: "Se pierde el tablero y el tiempo que llevas. El enlace sigue sirviendo si quieres retomarlo.",
+      confirmar: "Sí, dejarlo",
+    },
     borrar: {
       titulo: "¿Borrar esta tabla?",
       cuerpo: `Se pierden los puntajes de ${TAMANOS[estado.tam].nombre} ${NIVELES[estado.nivel].nombre.toLowerCase()} y no se pueden recuperar.`,
@@ -1099,6 +1177,7 @@ function pintarDialogo() {
   capaDialogo.querySelector("#dlg-confirmar").addEventListener("click", () => {
     estado.dialogo = null;
     if (cual === "salir") abandonar();
+    else if (cual === "dejarDuelo") salirDelDuelo();
     else {
       borrarPuntajes(estado.tam, estado.nivel);
       estado.puntajes = [];
@@ -1107,6 +1186,224 @@ function pintarDialogo() {
     }
   });
   capaDialogo.querySelector("#dlg-confirmar").focus();
+}
+
+// ---------------------------------------------------------------------------
+// Duelo contra un amigo.
+//
+// Los dos resuelven el mismo tablero, cada uno en su aparato y cuando quiera.
+// No hay pistas: con pistas no habría nada que comparar.
+// ---------------------------------------------------------------------------
+
+const CLAVE_DUELO = "sudoku_duelo";
+
+function guardarDuelo() {
+  try {
+    if (estado.duelo) localStorage.setItem(CLAVE_DUELO, JSON.stringify(estado.duelo));
+    else localStorage.removeItem(CLAVE_DUELO);
+  } catch (e) { /* sin almacenamiento, el duelo dura lo que dure la pestaña */ }
+}
+
+function leerDuelo() {
+  try {
+    const crudo = localStorage.getItem(CLAVE_DUELO);
+    const d = crudo ? JSON.parse(crudo) : null;
+    return d && Array.isArray(d.inicial) ? d : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+/** Arma un tablero y el enlace que lo lleva, para mandárselo al rival. */
+function armarDueloSudoku() {
+  estado.pantalla = "duelo";
+  estado.armando = { fase: "armando" };
+  pintar();
+
+  setTimeout(() => {
+    const n = estado.tam;
+    const { inicial } = generarPartida(n, estado.nivel);
+    estado.armando = {
+      fase: "enviar",
+      inicial,
+      enlace: enlaceCon("sudoku.html", {
+        t: "sud",
+        de: estado.jugador.trim() || NOMBRE_POR_DEFECTO,
+        tam: n,
+        nv: estado.nivel,
+        ini: inicial.join(""),
+      }),
+    };
+    pintar();
+  }, 30);
+}
+
+function comenzarDueloSudoku(rival, tam, nivel, inicial) {
+  estado.tam = tam;
+  estado.nivel = nivel;
+  estado.duelo = { rival, tam, nivel, inicial, tiempoMs: null, tiempoRival: null };
+  estado.armando = null;
+  guardarDuelo();
+  empezarPartida(inicial);
+}
+
+function cerrarDueloSudoku() {
+  estado.duelo.tiempoMs = estado.tiempoMs;
+  guardarDuelo();
+}
+
+function codigoDeResultado() {
+  return aCodigo({
+    t: "res",
+    de: estado.jugador.trim() || NOMBRE_POR_DEFECTO,
+    r: [[0, Math.round(estado.duelo.tiempoMs / 100)]],
+  });
+}
+
+function pegarResultadoRival(texto) {
+  const d = deCodigo(texto);
+  if (!d || d.t !== "res" || !Array.isArray(d.r) || !d.r.length) {
+    return "No se entiende ese código. Pégalo completo.";
+  }
+  estado.duelo.rival = d.de || estado.duelo.rival;
+  estado.duelo.tiempoRival = (Number(d.r[0][1]) || 0) * 100;
+  guardarDuelo();
+  pintar();
+  return null;
+}
+
+function salirDelDuelo() {
+  estado.duelo = null;
+  estado.armando = null;
+  estado.dialogo = null;
+  guardarDuelo();
+  detenerCronometro();
+  estado.tablero = [];
+  estado.pantalla = "config";
+  pintar();
+}
+
+function pintarDuelo() {
+  const a = estado.armando || {};
+  if (a.fase === "armando") return pintarArmandoDuelo();
+  if (a.fase === "enviar") return pintarEnviarDuelo();
+  if (a.fase === "final") return pintarFinalDueloSudoku();
+}
+
+function pintarArmandoDuelo() {
+  vistas.duelo.innerHTML = `
+    <div class="marca" style="padding-top:60px">
+      <div class="rueda" style="width:34px;height:34px;border:3px solid var(--borde);border-top-color:var(--cafe);border-radius:50%;animation:girar 800ms linear infinite;margin-inline:auto"></div>
+      <p class="bajada" style="margin-top:14px">Armando el tablero que van a resolver los dos…</p>
+    </div>
+  `;
+}
+
+function pintarEnviarDuelo() {
+  const a = estado.armando;
+  const texto = `Te reto en Sudoku ${TAMANOS[estado.tam].nombre} ${NIVELES[estado.nivel].nombre.toLowerCase()}. El mismo tablero para los dos, sin pistas. A ver quién lo saca más rápido:\n${a.enlace}`;
+
+  vistas.duelo.innerHTML = `
+    <div class="marca">
+      <h1 class="titulo">Duelo</h1>
+      <p class="bajada">Mándale este enlace a tu rival: le va a salir <strong>el mismo tablero</strong> que a ti. Gana quien lo resuelva en menos tiempo.</p>
+    </div>
+
+    <div class="caja-enlace"><code>${esc(a.enlace)}</code></div>
+
+    <a class="boton btn-wsp" href="${enlaceWhatsapp(texto)}" target="_blank" rel="noopener">Mandar por WhatsApp</a>
+    <button class="boton-linea" id="btn-copiar">Copiar el enlace</button>
+    <p class="aviso-copia" id="aviso"></p>
+
+    <p class="nota" style="text-align:center">No tienes que esperarlo: empieza cuando quieras.</p>
+    <button class="boton" id="btn-jugar-ya">Empezar a jugar</button>
+    <button class="boton-linea" id="btn-atras">Volver</button>
+  `;
+
+  vistas.duelo.querySelector("#btn-copiar").addEventListener("click", async () => {
+    const como = await compartir(texto, "Duelo en Sudoku");
+    const aviso = vistas.duelo.querySelector("#aviso");
+    aviso.textContent = como === "copiado" ? "Copiado. Pégalo donde quieras."
+      : como === "compartido" ? "Listo, se mandó."
+      : como === "cancelado" ? ""
+      : "No se pudo copiar. Selecciona el enlace de arriba a mano.";
+  });
+
+  vistas.duelo.querySelector("#btn-jugar-ya").addEventListener("click", () =>
+    comenzarDueloSudoku("Tu rival", estado.tam, estado.nivel, a.inicial));
+  vistas.duelo.querySelector("#btn-atras").addEventListener("click", () => {
+    estado.armando = null; irA("config");
+  });
+}
+
+function pintarFinalDueloSudoku() {
+  const d = estado.duelo;
+  const codigo = codigoDeResultado();
+
+  let comparacion = "";
+  if (d.tiempoRival !== null) {
+    const { ganador } = compararDuelo(
+      [{ intentos: 0, tiempoMs: d.tiempoMs }],
+      [{ intentos: 0, tiempoMs: d.tiempoRival }]
+    );
+    const nombreYo = esc(estado.jugador.trim() || NOMBRE_POR_DEFECTO);
+    comparacion = `
+      <div class="panel-final ${ganador === "yo" ? "gano" : ""}" style="margin-top:14px">
+        <h2>${ganador === "yo" ? "¡Ganaste!" : ganador === "rival" ? `Ganó ${esc(d.rival)}` : "Empate"}</h2>
+        <div class="marcador-duelo">
+          <div class="lado ${ganador === "yo" ? "vence" : ""}">
+            <span class="quien-duelo">${nombreYo}</span>
+            <span class="cifra-duelo">${formatearTiempo(d.tiempoMs)}</span>
+          </div>
+          <span class="versus">vs</span>
+          <div class="lado ${ganador === "rival" ? "vence" : ""}">
+            <span class="quien-duelo">${esc(d.rival)}</span>
+            <span class="cifra-duelo">${formatearTiempo(d.tiempoRival)}</span>
+          </div>
+        </div>
+        <p class="guardado">El mismo tablero para los dos, sin pistas.</p>
+      </div>
+    `;
+  }
+
+  vistas.duelo.innerHTML = `
+    <div class="marca">
+      <h1 class="titulo">¡Resuelto!</h1>
+      <p class="bajada">${TAMANOS[d.tam].nombre} ${NIVELES[d.nivel].nombre.toLowerCase()} en <strong>${formatearTiempo(d.tiempoMs)}</strong>.</p>
+    </div>
+
+    ${d.tiempoRival !== null ? comparacion : `
+      <div class="caja-enlace"><code>${codigo}</code></div>
+      <a class="boton btn-wsp" href="${enlaceWhatsapp(`Lo saqué en ${formatearTiempo(d.tiempoMs)}. Mi resultado:\n${codigo}`)}" target="_blank" rel="noopener">Mandar mi tiempo</a>
+      <button class="boton-linea" id="btn-copiar">Copiar mi tiempo</button>
+      <p class="aviso-copia" id="aviso"></p>
+
+      <div class="campo" style="margin-top:6px">
+        <label for="codigo-rival">Pega acá el resultado de tu rival</label>
+        <input id="codigo-rival" type="text" placeholder="Pega el código" autocomplete="off">
+        <span class="ayuda" id="error-codigo"></span>
+      </div>
+      <button class="boton" id="btn-comparar">Comparar</button>
+    `}
+
+    <button class="boton-linea" id="btn-salir-duelo" style="margin-top:6px">Salir del duelo</button>
+  `;
+
+  const copiar = vistas.duelo.querySelector("#btn-copiar");
+  if (copiar) copiar.addEventListener("click", async () => {
+    const como = await compartir(codigo, "Mi tiempo");
+    const aviso = vistas.duelo.querySelector("#aviso");
+    aviso.textContent = como === "copiado" ? "Copiado." : como === "compartido" ? "Listo, se mandó."
+      : como === "cancelado" ? "" : "No se pudo copiar. Selecciónalo a mano.";
+  });
+
+  const comparar = vistas.duelo.querySelector("#btn-comparar");
+  if (comparar) comparar.addEventListener("click", () => {
+    const error = pegarResultadoRival(vistas.duelo.querySelector("#codigo-rival").value);
+    if (error) vistas.duelo.querySelector("#error-codigo").textContent = error;
+  });
+
+  vistas.duelo.querySelector("#btn-salir-duelo").addEventListener("click", salirDelDuelo);
 }
 
 // ---------------------------------------------------------------------------
@@ -1144,7 +1441,46 @@ document.addEventListener("keydown", (e) => {
 // ---------------------------------------------------------------------------
 
 estado.jugador = leerUltimoJugador();
-pintar();
+let alertaEnlaceMalo = false;
+
+(function arrancar() {
+  const entrante = datosDelEnlace();
+
+  // Un enlace de duelo manda sobre cualquier cosa que hubiera guardada.
+  if (entrante && entrante.t === "sud" && TAMANOS[entrante.tam] && NIVELES[entrante.nv]) {
+    const n = entrante.tam;
+    const inicial = String(entrante.ini).split("").map(Number);
+    const bienFormado = inicial.length === n * n &&
+      inicial.every((v) => Number.isInteger(v) && v >= 0 && v <= n);
+    // Que venga bien escrito no basta: tiene que ser un sudoku de verdad, con
+    // una sola respuesta. Si no, los dos estarían resolviendo cosas distintas.
+    if (bienFormado && contarSoluciones(inicial, n) === 1) {
+      limpiarEnlace();
+      comenzarDueloSudoku(entrante.de || "Tu rival", n, entrante.nv, inicial);
+      return;
+    }
+    limpiarEnlace();
+    alertaEnlaceMalo = true;
+  }
+
+  // Un duelo a medias sobrevive a que se cierre la pestaña.
+  const guardado = leerDuelo();
+  if (guardado) {
+    estado.duelo = guardado;
+    estado.tam = guardado.tam;
+    estado.nivel = guardado.nivel;
+    if (guardado.tiempoMs !== null) {
+      estado.armando = { fase: "final" };
+      estado.pantalla = "duelo";
+      pintar();
+    } else {
+      empezarPartida(guardado.inicial);
+    }
+    return;
+  }
+
+  pintar();
+})();
 </script>
 </body>
 </html>
