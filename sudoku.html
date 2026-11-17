@@ -212,15 +212,17 @@
   color: var(--tenue);
 }
 
-.acciones-s { display: flex; gap: 7px; }
+.acciones-s { display: flex; gap: 6px; }
 
 .accion {
   flex: 1;
+  min-width: 0;
   border: 1.5px solid var(--borde-fuerte);
   border-radius: 999px;
-  padding: 10px 6px;
+  padding: 10px 4px;
   font-weight: 700;
-  font-size: 0.82rem;
+  font-size: 0.78rem;
+  white-space: nowrap;
   color: var(--tinta);
   display: inline-flex;
   align-items: center;
@@ -236,6 +238,14 @@
   background: var(--cafe);
   border-color: var(--cafe);
   color: var(--cafe-sobre);
+}
+
+/* Cuántas jugadas quedan por deshacer. */
+.accion .cuenta {
+  font-family: var(--cifra);
+  font-size: 0.68rem;
+  font-weight: 600;
+  opacity: 0.6;
 }
 
 .cargando {
@@ -572,6 +582,8 @@ const estado = {
   notas: [],
   seleccion: null,
   modoNotas: false,
+  /** Una foto del tablero antes de cada jugada, para poder volver atrás. */
+  historial: [],
   pistas: 0,
   tiempoMs: 0,
   inicioMs: 0,
@@ -585,6 +597,31 @@ let cronometro = null;
 
 const esDada = (i) => estado.inicial[i] !== 0;
 const pistasRestantes = () => PISTAS_POR_PARTIDA - estado.pistas;
+
+/**
+ * Guarda cómo estaba el tablero antes de la jugada que viene.
+ *
+ * Se apila el tablero entero y no sólo la casilla tocada porque una jugada
+ * también borra candidatos en todo lo que esa casilla ve, y al volver atrás
+ * esas notas tienen que reaparecer.
+ */
+function apilarJugada() {
+  estado.historial.push({
+    tablero: estado.tablero.slice(),
+    notas: estado.notas.map((s) => [...s]),
+  });
+}
+
+function deshacer() {
+  if (estado.ganada) return;
+  const paso = estado.historial.pop();
+  if (!paso) return;
+  estado.tablero = paso.tablero;
+  estado.notas = paso.notas.map((lista) => new Set(lista));
+  // Las pistas ya gastadas no se devuelven: si no, bastaría con pedir una,
+  // mirar la respuesta y deshacer.
+  pintar();
+}
 
 const esc = (texto) =>
   String(texto).replace(/[&<>"']/g, (c) =>
@@ -613,6 +650,7 @@ function empezarPartida() {
     estado.notas = Array.from({ length: n * n }, () => new Set());
     estado.seleccion = inicial.findIndex((v) => v === 0);
     estado.modoNotas = false;
+    estado.historial = [];
     estado.pistas = 0;
     estado.tiempoMs = 0;
     estado.ganada = false;
@@ -651,12 +689,14 @@ function escribir(valor) {
   if (estado.modoNotas) {
     // Una nota sobre una casilla ya resuelta no tiene sentido.
     if (estado.tablero[i] !== 0) return;
+    apilarJugada();
     const notas = estado.notas[i];
     if (notas.has(valor)) notas.delete(valor); else notas.add(valor);
     pintar();
     return;
   }
 
+  apilarJugada();
   // Volver a marcar el mismo número lo borra, que es lo que uno espera
   // cuando se da cuenta del error.
   estado.tablero[i] = estado.tablero[i] === valor ? 0 : valor;
@@ -672,6 +712,8 @@ function escribir(valor) {
 function borrar() {
   const i = estado.seleccion;
   if (estado.ganada || i === null || esDada(i)) return;
+  if (estado.tablero[i] === 0 && estado.notas[i].size === 0) return;
+  apilarJugada();
   estado.tablero[i] = 0;
   estado.notas[i].clear();
   pintar();
@@ -692,6 +734,7 @@ function usarPista() {
   }
   if (i < 0) return;
 
+  apilarJugada();
   estado.tablero[i] = estado.solucion[i];
   estado.notas[i].clear();
   for (const j of tablaCompaneras(estado.tam)[i]) estado.notas[j].delete(estado.solucion[i]);
@@ -917,6 +960,8 @@ function pintarJuego() {
       <div class="digitos-s c${n === 9 ? 5 : n}">${teclas}</div>
       <div class="acciones-s">
         <button class="accion" id="btn-notas" aria-pressed="${estado.modoNotas}">Notas</button>
+        <button class="accion" id="btn-deshacer"${estado.historial.length === 0 ? " disabled" : ""}>Atrás${
+          estado.historial.length ? ` <span class="cuenta">${estado.historial.length}</span>` : ""}</button>
         <button class="accion" id="btn-borrar">Borrar</button>
         <button class="accion" id="btn-pista"${pistasRestantes() <= 0 ? " disabled" : ""}>Pista ${pistasRestantes()}</button>
       </div>
@@ -951,6 +996,8 @@ function pintarJuego() {
 
   const bNotas = v.querySelector("#btn-notas");
   if (bNotas) bNotas.addEventListener("click", alternarNotas);
+  const bDeshacer = v.querySelector("#btn-deshacer");
+  if (bDeshacer) bDeshacer.addEventListener("click", deshacer);
   const bBorrar = v.querySelector("#btn-borrar");
   if (bBorrar) bBorrar.addEventListener("click", borrar);
   const bPista = v.querySelector("#btn-pista");
@@ -1079,6 +1126,7 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "Backspace" || e.key === "Delete") { e.preventDefault(); borrar(); return; }
   if (e.key === "n" || e.key === "N") { e.preventDefault(); alternarNotas(); return; }
   if (e.key === "h" || e.key === "H") { e.preventDefault(); usarPista(); return; }
+  if ((e.ctrlKey || e.metaKey) && (e.key === "z" || e.key === "Z")) { e.preventDefault(); deshacer(); return; }
 
   const pasos = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -n, ArrowDown: n };
   if (e.key in pasos && estado.seleccion !== null) {
