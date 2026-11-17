@@ -57,6 +57,9 @@
 .tablero-t {
   display: grid;
   grid-template-columns: repeat(6, 1fr);
+  /* Las filas se reparten el alto en partes iguales. Sin esto, una fila sin
+     ningún astro no tiene contenido que la estire y queda a media altura. */
+  grid-template-rows: repeat(6, 1fr);
   width: 100%;
   aspect-ratio: 1;
   background: var(--superficie);

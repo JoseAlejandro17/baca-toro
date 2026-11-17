@@ -69,6 +69,9 @@
 .tablero {
   display: grid;
   grid-template-columns: repeat(var(--n), 1fr);
+  /* Las filas se reparten el alto en partes iguales. Sin esto, una fila sin
+     ningún número no tiene contenido que la estire y queda a media altura. */
+  grid-template-rows: repeat(var(--n), 1fr);
   width: 100%;
   max-width: min(100%, 60vh);
   aspect-ratio: 1;
